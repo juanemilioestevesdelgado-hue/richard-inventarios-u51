@@ -34,7 +34,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+let analytics;
+try {
+    analytics = getAnalytics(app);
+} catch (e) {
+    console.warn("Analytics blocked or failed to load");
+}
 const db = getFirestore(app);
 
 const IMGBB_API_KEY = "6f61e5ee8f8afa155a55c439b13602e5";
