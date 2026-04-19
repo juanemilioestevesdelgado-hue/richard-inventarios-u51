@@ -331,6 +331,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Inline Proxima Revision
             const nextRevInput = tr.querySelector(`#next-rev-${item.id}`);
+            nextRevInput.addEventListener('input', (e) => {
+                const val = e.target.value;
+                if (val) {
+                    const parts = val.split('-');
+                    if (parts[0] && parts[0].length > 4) {
+                        parts[0] = parts[0].substring(0, 4);
+                        e.target.value = parts.join('-');
+                    }
+                }
+            });
             nextRevInput.addEventListener('blur', async (e) => {
                 if (item.proximaRevision !== e.target.value) {
                     await updateDoc(doc(db, currentCollection, item.id), { proximaRevision: e.target.value });
