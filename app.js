@@ -1,5 +1,4 @@
-import { fullInventory } from './data.js?v=2';
-
+import { inventoryU51, inventoryCC51, inventoryT51 } from './data.js?v=3';
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { 
@@ -12,6 +11,16 @@ import {
     updateDoc, 
     writeBatch 
 } from "firebase/firestore";
+
+const inventoryMap = {
+    'U51': inventoryU51,
+    'CC51': inventoryCC51,
+    'T51': inventoryT51
+};
+
+let currentUnit = localStorage.getItem('selectedUnit') || 'U51';
+let currentCollection = `inventory_${currentUnit.toLowerCase()}`;
+let fullInventory = inventoryMap[currentUnit];
 
 // Firebase configuration
 const firebaseConfig = {
@@ -45,60 +54,91 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Cargando inventario desde Firebase...</td></tr>';
 
-    // Real-time listener
-    onSnapshot(collection(db, "inventory"), (snapshot) => {
-        if (snapshot.empty) {
-            console.log("Database is empty. Populating...");
-            tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Inicializando base de datos por primera vez...</td></tr>';
-            // One-time populate if empty
-            const batch = writeBatch(db);
-            fullInventory.forEach((item) => {
-                const docRef = doc(db, "inventory", item.codigo);
-                batch.set(docRef, { ...item, estado: "", revisado: false, comentarios: "", fotoUrl: "" });
-            });
-            batch.commit();
-            return;
-        }
+    // Splash screen handling
+    const splashScreen = document.getElementById('splash-screen');
+    const unitButtons = document.querySelectorAll('.unit-btn');
+    const appContainer = document.querySelector('.app-container');
+    const mainTitle = document.getElementById('main-title');
 
-        currentInventoryData = [];
-        snapshot.forEach((docSnap) => {
-            currentInventoryData.push({ id: docSnap.id, ...docSnap.data() });
-        });
-
-        // Sort data by codigo to keep numbering stable
-        currentInventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
-
-        totalItemsEl.textContent = currentInventoryData.length;
-        reviewedCount = currentInventoryData.filter(item => item.revisado).length;
-        reviewedItemsEl.textContent = reviewedCount;
+    const initAppForUnit = (unit) => {
+        currentUnit = unit;
+        localStorage.setItem('selectedUnit', unit);
+        currentCollection = `inventory_${unit.toLowerCase()}`;
+        fullInventory = inventoryMap[unit];
+        mainTitle.textContent = `INVENTARIO ${unit}`;
         
-        // Apply current filter
-        const filter = searchInput.value.toLowerCase();
-        const filteredData = currentInventoryData.filter(item => 
-            (item.descripcion || '').toLowerCase().includes(filter) ||
-            (item.codigo || '').toLowerCase().includes(filter)
-        );
+        splashScreen.classList.add('hidden');
+        appContainer.classList.add('visible');
+        
+        startRealtimeListener();
+    };
 
-        // Save current focus to restore it later
-        const activeElementId = document.activeElement ? document.activeElement.id : null;
-        const cursorPosition = document.activeElement ? document.activeElement.selectionStart : null;
+    unitButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            initAppForUnit(btn.dataset.unit);
+        });
+    });
 
-        renderTable(filteredData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
+    // If unit is already selected, we could skip splash, but user wants it before entering.
+    // However, if they just refreshed, maybe show it anyway.
+    // For now, let's always show splash unless they click.
 
-        // Restore focus if it was a comment or status
-        if (activeElementId) {
-            const el = document.getElementById(activeElementId);
-            if (el) {
-                el.focus();
-                if (cursorPosition !== null && typeof el.setSelectionRange === 'function') {
-                    el.setSelectionRange(cursorPosition, cursorPosition);
+    let unsubscribe = null;
+
+    function startRealtimeListener() {
+        if (unsubscribe) unsubscribe();
+        
+        tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Conectando con la base de datos...</td></tr>';
+
+        unsubscribe = onSnapshot(collection(db, currentCollection), (snapshot) => {
+            if (snapshot.empty) {
+                console.log(`Database ${currentCollection} is empty. Populating...`);
+                tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Inicializando base de datos por primera vez...</td></tr>';
+                const batch = writeBatch(db);
+                fullInventory.forEach((item) => {
+                    const docRef = doc(db, currentCollection, item.codigo);
+                    batch.set(docRef, { ...item, estado: "", revisado: false, comentarios: "", fotoUrl: "" });
+                });
+                batch.commit();
+                return;
+            }
+
+            currentInventoryData = [];
+            snapshot.forEach((docSnap) => {
+                currentInventoryData.push({ id: docSnap.id, ...docSnap.data() });
+            });
+
+            currentInventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
+
+            totalItemsEl.textContent = currentInventoryData.length;
+            reviewedCount = currentInventoryData.filter(item => item.revisado).length;
+            reviewedItemsEl.textContent = reviewedCount;
+            
+            const filter = searchInput.value.toLowerCase();
+            const filteredData = currentInventoryData.filter(item => 
+                (item.descripcion || '').toLowerCase().includes(filter) ||
+                (item.codigo || '').toLowerCase().includes(filter)
+            );
+
+            const activeElementId = document.activeElement ? document.activeElement.id : null;
+            const cursorPosition = document.activeElement ? document.activeElement.selectionStart : null;
+
+            renderTable(filteredData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
+
+            if (activeElementId) {
+                const el = document.getElementById(activeElementId);
+                if (el) {
+                    el.focus();
+                    if (cursorPosition !== null && typeof el.setSelectionRange === 'function') {
+                        el.setSelectionRange(cursorPosition, cursorPosition);
+                    }
                 }
             }
-        }
-    }, (error) => {
-        console.error("Snapshot error:", error);
-        tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; color: red;">Error en tiempo real. Revisa la consola.</td></tr>';
-    });
+        }, (error) => {
+            console.error("Snapshot error:", error);
+            tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; color: red;">Error en tiempo real. Revisa la consola.</td></tr>';
+        });
+    }
 
     // Search input listener
     searchInput.addEventListener('input', () => {
@@ -207,7 +247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 
                 reviewedItemsEl.textContent = reviewedCount;
-                await updateDoc(doc(db, "inventory", item.id), updateData);
+                await updateDoc(doc(db, currentCollection, item.id), updateData);
             });
 
             // Comment
@@ -218,7 +258,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 e.target.style.height = (e.target.scrollHeight) + 'px';
                 clearTimeout(timeoutId);
                 timeoutId = setTimeout(async () => {
-                    await updateDoc(doc(db, "inventory", item.id), { comentarios: e.target.value });
+                    await updateDoc(doc(db, currentCollection, item.id), { comentarios: e.target.value });
                 }, 1000);
             });
 
@@ -234,7 +274,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (item.estado) updateSelectColor(item.estado);
             statusSelect.addEventListener('change', async (e) => {
                 updateSelectColor(e.target.value);
-                await updateDoc(doc(db, "inventory", item.id), { estado: e.target.value });
+                await updateDoc(doc(db, currentCollection, item.id), { estado: e.target.value });
             });
 
             // Delete Item
@@ -244,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!confirm(`¿Estás seguro de ELIMINAR el ítem ${item.codigo}? Esta acción no se puede deshacer.`)) return;
                     try {
                         const batch = writeBatch(db);
-                        batch.delete(doc(db, "inventory", item.id));
+                        batch.delete(doc(db, currentCollection, item.id));
                         await batch.commit();
                         tr.remove();
                         photoTr.remove();
@@ -290,7 +330,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!confirm('¿Estás seguro de borrar esta foto?')) return;
                     deletePhotoBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Borrando...';
                     try {
-                        await updateDoc(doc(db, "inventory", item.id), { fotoUrl: "" });
+                        await updateDoc(doc(db, currentCollection, item.id), { fotoUrl: "" });
                         previewThumb.src = "";
                         previewThumb.classList.remove('visible');
                         deletePhotoBtn.classList.add('hidden');
@@ -318,7 +358,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         previewThumb.src = imageUrl;
                         previewThumb.classList.add('visible');
                         deletePhotoBtn.classList.remove('hidden');
-                        await updateDoc(doc(db, "inventory", item.id), { fotoUrl: imageUrl });
+                        await updateDoc(doc(db, currentCollection, item.id), { fotoUrl: imageUrl });
                         labelBtn.innerHTML = '<i class="ph ph-check"></i> Subida';
                     } else {
                         throw new Error("ImgBB error");
@@ -342,6 +382,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     closeModal.addEventListener('click', () => modal.classList.add('hidden'));
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
 
+    // Change unit button — return to splash
+    const changeUnitBtn = document.getElementById('change-unit-btn');
+    if (changeUnitBtn) {
+        changeUnitBtn.addEventListener('click', () => {
+            if (unsubscribe) unsubscribe();
+            localStorage.removeItem('selectedUnit');
+            appContainer.classList.remove('visible');
+            splashScreen.classList.remove('hidden');
+            tableBody.innerHTML = '';
+            totalItemsEl.textContent = '0';
+            reviewedItemsEl.textContent = '0';
+            searchInput.value = '';
+        });
+    }
+
     // Sync button
     const syncBtn = document.getElementById('sync-btn');
     syncBtn.addEventListener('click', async () => {
@@ -351,7 +406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const batch = writeBatch(db);
             fullInventory.forEach((item) => {
-                const docRef = doc(db, "inventory", item.codigo);
+                const docRef = doc(db, currentCollection, item.codigo);
                 batch.set(docRef, {
                     codigo: item.codigo, sicafi: item.sicafi, pf: item.pf,
                     descripcion: item.descripcion, ubicacion: item.ubicacion,
@@ -377,7 +432,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             clearDbBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Borrando...';
             clearDbBtn.disabled = true;
             try {
-                const snap = await getDocs(collection(db, "inventory"));
+                const snap = await getDocs(collection(db, currentCollection));
                 const batch = writeBatch(db);
                 snap.forEach((docSnap) => batch.delete(docSnap.ref));
                 await batch.commit();
@@ -422,7 +477,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
 
             try {
-                const existingDoc = await getDocs(collection(db, "inventory"));
+                const existingDoc = await getDocs(collection(db, currentCollection));
                 let exists = false;
                 existingDoc.forEach(d => { if (d.id === newItem.codigo) exists = true; });
                 if (exists) {
@@ -431,7 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     submitBtn.disabled = false;
                     return;
                 }
-                await setDoc(doc(db, "inventory", newItem.codigo), newItem);
+                await setDoc(doc(db, currentCollection, newItem.codigo), newItem);
                 alert('Item guardado correctamente. La página se recargará.');
                 window.location.reload();
             } catch (error) {
@@ -475,7 +530,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
 
             try {
-                await updateDoc(doc(db, "inventory", originalCodigo), updatedItem);
+                await updateDoc(doc(db, currentCollection, originalCodigo), updatedItem);
                 alert('Item actualizado correctamente. La página se recargará.');
                 window.location.reload();
             } catch (error) {
@@ -499,7 +554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const { jsPDF } = window.jspdf;
                 const pdfDoc = new jsPDF({ orientation: 'landscape' });
-                pdfDoc.text("Inventario U-51 - Cía. 51", 14, 15);
+                pdfDoc.text(`Inventario ${currentUnit} - Cía. 51`, 14, 15);
                 pdfDoc.setFontSize(10);
 
                 const fetchImageAsBase64 = (url) => {
@@ -536,7 +591,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     });
                 };
 
-                const pdfSnap = await getDocs(collection(db, "inventory"));
+                const pdfSnap = await getDocs(collection(db, currentCollection));
                 const pdfData = [];
                 let pdfIdx = 1;
                 for (const docSnap of pdfSnap.docs) {
@@ -603,7 +658,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             exportExcelBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Generando Excel...';
             try {
-                const excelSnap = await getDocs(collection(db, "inventory"));
+                const excelSnap = await getDocs(collection(db, currentCollection));
                 let excelIdx = 1;
                 const excelData = excelSnap.docs.map(docSnap => {
                     const item = docSnap.data();
