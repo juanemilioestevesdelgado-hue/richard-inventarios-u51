@@ -764,38 +764,112 @@ document.addEventListener('DOMContentLoaded', async () => {
     const aiMessages = document.getElementById('ai-messages');
 
     if (aiInput && sendAi && aiMessages) {
-        function addMessage(text, sender) {
+        // Contexto de la última búsqueda para comandos de seguimiento
+        let lastMatchedItems = [];
+        let lastKeywords = [];
+
+        function addMessage(text, sender, actions = []) {
             const div = document.createElement('div');
             div.className = `ai-message ${sender}`;
             div.innerHTML = text;
-            
-            // Si es el primer mensaje, expandimos la caja
+
+            if (actions.length > 0) {
+                const actionsDiv = document.createElement('div');
+                actionsDiv.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;';
+                actions.forEach(action => {
+                    const btn = document.createElement('button');
+                    btn.innerHTML = action.label;
+                    btn.style.cssText = 'background:#6366f1;color:white;border:none;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;';
+                    btn.addEventListener('click', action.handler);
+                    actionsDiv.appendChild(btn);
+                });
+                div.appendChild(actionsDiv);
+            }
+
             if (aiMessages.style.maxHeight === '0px' || !aiMessages.style.maxHeight) {
                 aiMessages.style.padding = '1.5rem';
-                aiMessages.style.maxHeight = '400px';
+                aiMessages.style.maxHeight = '500px';
                 aiMessages.style.overflowY = 'auto';
             }
-            
             aiMessages.appendChild(div);
             aiMessages.scrollTop = aiMessages.scrollHeight;
         }
 
+        // Función para filtrar la tabla en pantalla
+        function filterTableWith(term) {
+            searchInput.value = term;
+            searchInput.dispatchEvent(new Event('input'));
+        }
+
+        // Función para descargar PDF de un conjunto de ítems
+        async function downloadFilteredPDF(items, titulo) {
+            if (typeof window.jspdf === 'undefined') {
+                addMessage("⚠️ La librería de PDF no está disponible.", 'assistant');
+                return;
+            }
+            addMessage(`⏳ Generando PDF de <strong>${items.length}</strong> ítems de "${titulo}"...`, 'assistant');
+            const { jsPDF } = window.jspdf;
+            const pdfDoc = new jsPDF({ orientation: 'landscape' });
+            pdfDoc.text(`Inventario ${currentUnit} — Filtro: "${titulo}"`, 14, 15);
+            pdfDoc.setFontSize(9);
+            const pdfData = items.map((item, idx) => [
+                idx + 1,
+                item.codigo || '', item.sicafi || '', item.pf || '',
+                item.descripcion || '', item.ubicacion || '',
+                item.marca || '', item.modelo || '', item.serie || '',
+                item.estado || '', item.revisado ? 'Sí' : 'No', item.comentarios || ''
+            ]);
+            pdfDoc.autoTable({
+                startY: 20,
+                head: [['#', 'Código', 'SICAFI', 'PF', 'Descripción', 'Ubicación', 'Marca', 'Modelo', 'Serie', 'Estado', 'Revisado', 'Comentarios']],
+                body: pdfData,
+                theme: 'grid',
+                styles: { fontSize: 7.5, valign: 'middle', halign: 'left', overflow: 'linebreak' },
+                headStyles: { fillColor: [99, 102, 241], halign: 'center', fontSize: 7.5, fontStyle: 'bold' }
+            });
+            pdfDoc.save(`inventario_${titulo.replace(/\s+/g,'_')}.pdf`);
+            addMessage(`✅ ¡PDF listo! Se han descargado <strong>${items.length}</strong> ítems de "${titulo}". 📄`, 'assistant');
+        }
+
+        // Función para descargar Excel de un conjunto de ítems
+        function downloadFilteredExcel(items, titulo) {
+            if (typeof XLSX === 'undefined') {
+                addMessage("⚠️ La librería de Excel no está disponible.", 'assistant');
+                return;
+            }
+            const excelData = items.map((item, idx) => ({
+                '#': idx + 1,
+                'Código': item.codigo || '', 'SICAFI': item.sicafi || '', 'PF': item.pf || '',
+                'Descripción': item.descripcion || '', 'Ubicación': item.ubicacion || '',
+                'Marca': item.marca || '', 'Modelo': item.modelo || '', 'Serie': item.serie || '',
+                'Estado': item.estado || '', 'Revisado': item.revisado ? 'Sí' : 'No',
+                'Comentarios': item.comentarios || ''
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Filtrado");
+            XLSX.writeFile(workbook, `inventario_${titulo.replace(/\s+/g,'_')}.xlsx`);
+            addMessage(`✅ ¡Excel listo! Se han exportado <strong>${items.length}</strong> ítems de "${titulo}". 📊`, 'assistant');
+        }
+
         async function processAiQuery(query) {
-            // Mostrar "Analizando..."
             const typingDiv = document.createElement('div');
             typingDiv.className = 'ai-message assistant';
             typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+            if (aiMessages.style.maxHeight === '0px' || !aiMessages.style.maxHeight) {
+                aiMessages.style.padding = '1.5rem';
+                aiMessages.style.maxHeight = '500px';
+                aiMessages.style.overflowY = 'auto';
+            }
             aiMessages.appendChild(typingDiv);
             aiMessages.scrollTop = aiMessages.scrollHeight;
 
             if (!currentInventoryData || currentInventoryData.length === 0) {
                 typingDiv.remove();
-                addMessage("⚠️ Los datos del inventario aún no han cargado. Espera un momento e intenta de nuevo.", 'assistant');
+                addMessage("⚠️ Los datos del inventario aún no han cargado. Espera un momento.", 'assistant');
                 return;
             }
 
-            // ── BÚSQUEDA LOCAL INTELIGENTE ────────────────────────────
-            // Normalizamos: quitamos acentos y pasamos a singular básico
             function norm(str) {
                 let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
@@ -803,16 +877,41 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['cuanto','cuantos','cuanta','cuantas','donde','hay','de','el','la','los','las','un','una','que','en','esta','estan','son','es','me','mi','tu','su','como','cual','tienen','tienen','cuales','tengo','tiene','total','cantidad','cuál','dónde','están']);
+            const stopWords = new Set(['cuanto','cuantos','cuanta','cuantas','donde','hay','de','el','la','los','las','un','una','que','en','esta','estan','son','es','me','mi','tu','su','como','cual','tienen','cuales','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','pdf','excel','quiero','ver','lista','listar','dame','dime']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            // ── DETECTAR COMANDOS DE SEGUIMIENTO (muéstramelo, descárgalo, etc.) ──
+            const isFollowUp = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|screen|tabla/.test(qNorm);
+            const wantsPDF  = /pdf|descargar pdf|baja pdf/.test(qNorm);
+            const wantsExcel = /excel|xls|descargar excel|baja excel/.test(qNorm);
+
+            if ((isFollowUp || wantsPDF || wantsExcel) && lastMatchedItems.length > 0) {
+                const kw = lastKeywords.join(' ');
+                typingDiv.remove();
+                if (wantsPDF) {
+                    await downloadFilteredPDF(lastMatchedItems, kw);
+                } else if (wantsExcel) {
+                    downloadFilteredExcel(lastMatchedItems, kw);
+                } else {
+                    // Filtrar tabla
+                    filterTableWith(lastKeywords[0] || kw);
+                    addMessage(`📋 He filtrado la tabla para mostrar solo los <strong>${lastMatchedItems.length}</strong> ítems de "<strong>${kw}</strong>". ¡Échalos un vistazo abajo! 👇`, 'assistant', [
+                        { label: '🔄 Ver todo', handler: () => { filterTableWith(''); addMessage('Se ha limpiado el filtro. Mostrando todo el inventario. 📋', 'assistant'); } },
+                        { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(lastMatchedItems, kw) },
+                        { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(lastMatchedItems, kw) }
+                    ]);
+                }
+                return;
+            }
+
+            // ── DETECTAR INTENCIÓN ──
+            const wantsCount    = /cuanto|cuantos|cantidad|total|numero/.test(qNorm);
+            const wantsLocation = /donde|ubicacion|lugar|encuentra/.test(qNorm);
+            const wantsStatus   = /estado|condicion|mal|regular|buen/.test(qNorm);
+            const wantsShow     = /muestra|lista|ver|visualiz|filtr|tabla/.test(qNorm) || wantsPDF || wantsExcel;
+
             const keywords = qNorm.split(/[\s¿?.,!]+/).map(norm).filter(w => w.length > 2 && !stopWords.has(w));
 
-            // Detectar intención
-            const wantsCount   = /cuanto|cuantos|cantidad|total|numero/.test(qNorm);
-            const wantsLocation = /donde|ubicacion|lugar|encuentra/.test(qNorm);
-            const wantsStatus  = /estado|condicion|mal|regular|buen/.test(qNorm);
-
-            // Filtrar items que coincidan con alguna keyword
             const matchedItems = currentInventoryData.filter(item => {
                 const desc = norm(item.descripcion);
                 const cod  = norm(item.codigo);
@@ -820,60 +919,65 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return keywords.some(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
             });
 
-            let localAnswer = null;
-
-            if (keywords.length > 0) {
-                if (matchedItems.length === 0) {
-                    localAnswer = `No encontré ningún ítem en el inventario que coincida con tu búsqueda ("${keywords.join(', ')}"). 🔍 Verifica cómo aparece en la lista.`;
-                } else if (wantsCount) {
-                    localAnswer = `📦 Hay <strong>${matchedItems.length}</strong> ítem(s) relacionados con <strong>"${keywords.join(' ')}"</strong> en el inventario.`;
-                } else if (wantsLocation) {
-                    const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
-                    localAnswer = `📍 Los ítems de <strong>"${keywords.join(' ')}"</strong> (${matchedItems.length} en total) se encuentran en: <strong>${locs.join(', ')}</strong>.`;
-                } else if (wantsStatus) {
-                    const buenos   = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'bueno').length;
-                    const regulares = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'regular').length;
-                    const malos    = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'malo').length;
-                    localAnswer = `📊 Estado de los <strong>${matchedItems.length}</strong> ítems de "<strong>${keywords.join(' ')}</strong>":<br>✅ Buenos: ${buenos} &nbsp; ⚠️ Regulares: ${regulares} &nbsp; ❌ Malos: ${malos}`;
-                }
+            // Guardar contexto para seguimiento
+            if (keywords.length > 0 && matchedItems.length > 0) {
+                lastMatchedItems = matchedItems;
+                lastKeywords = keywords;
             }
 
-            // Si tenemos respuesta local directa, la mostramos sin llamar a la API
-            if (localAnswer) {
-                typingDiv.remove();
-                addMessage(localAnswer, 'assistant');
+            typingDiv.remove();
+
+            if (keywords.length === 0) {
+                addMessage("¡Hola! Puedo ayudarte a 🔢 contar, 📍 ubicar, 📊 ver estado, 📋 filtrar la tabla o 📄 descargar PDF/Excel de cualquier ítem. ¿Qué quieres saber?", 'assistant');
                 return;
             }
 
-            // ── CONSULTA A LA IA (solo para preguntas generales/complejas) ──
-            try {
-                // Solo enviamos un resumen pequeño, no todo el inventario
-                const summary = `Total ítems: ${currentInventoryData.length}. Tipos de equipo: ${[...new Set(currentInventoryData.map(i => (i.descripcion||'').split(' ')[0]))].slice(0,30).join(', ')}.`;
+            if (matchedItems.length === 0) {
+                addMessage(`No encontré ningún ítem que coincida con "<strong>${keywords.join(', ')}</strong>". 🔍 Verifica cómo aparece en la lista.`, 'assistant');
+                return;
+            }
 
-                const response = await fetch('https://text.pollinations.ai/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'openai',
-                        messages: [
-                            { role: 'system', content: `Eres un asistente de inventario de una estación de bomberos. Resumen del inventario: ${summary}. Responde en español, con emojis, de manera amigable y profesional.` },
-                            { role: 'user', content: query }
-                        ]
-                    })
-                });
+            const kw = keywords.join(' ');
 
-                if (!response.ok) throw new Error('API error');
-                let text = await response.text();
-                // Eliminar avisos de la API si vienen
-                text = text.replace(/⚠️[\s\S]{0,300}normally\./g, '').trim();
-                if (!text) text = "Lo siento, no pude procesar tu consulta en este momento. Intenta de nuevo. 🤖";
-                typingDiv.remove();
-                addMessage(text.replace(/\n/g, '<br>'), 'assistant');
-            } catch(e) {
-                typingDiv.remove();
-                addMessage("🤖 No pude conectarme al servicio de IA en este momento. Intenta de nuevo en unos segundos.", 'assistant');
+            if (wantsPDF) {
+                await downloadFilteredPDF(matchedItems, kw);
+            } else if (wantsExcel) {
+                downloadFilteredExcel(matchedItems, kw);
+            } else if (wantsShow) {
+                filterTableWith(keywords[0]);
+                addMessage(`📋 He filtrado la tabla para mostrar los <strong>${matchedItems.length}</strong> ítems de "<strong>${kw}</strong>". 👇`, 'assistant', [
+                    { label: '🔄 Ver todo', handler: () => { filterTableWith(''); addMessage('Filtro limpiado. Mostrando todo el inventario. 📋', 'assistant'); } },
+                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kw) },
+                    { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(matchedItems, kw) }
+                ]);
+            } else if (wantsCount) {
+                addMessage(`📦 Hay <strong>${matchedItems.length}</strong> ítem(s) de "<strong>${kw}</strong>" en el inventario.`, 'assistant', [
+                    { label: '📋 Mostrar en tabla', handler: () => { filterTableWith(keywords[0]); addMessage(`Filtrando tabla por "<strong>${kw}</strong>". 👇`, 'assistant'); } },
+                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kw) },
+                    { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(matchedItems, kw) }
+                ]);
+            } else if (wantsLocation) {
+                const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
+                addMessage(`📍 Los <strong>${matchedItems.length}</strong> ítems de "<strong>${kw}</strong>" están en: <strong>${locs.join(', ')}</strong>.`, 'assistant', [
+                    { label: '📋 Mostrar en tabla', handler: () => { filterTableWith(keywords[0]); addMessage(`Filtrando tabla por "<strong>${kw}</strong>". 👇`, 'assistant'); } }
+                ]);
+            } else if (wantsStatus) {
+                const buenos    = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'bueno').length;
+                const regulares = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'regular').length;
+                const malos     = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'malo').length;
+                addMessage(`📊 Estado de <strong>${matchedItems.length}</strong> ítems de "<strong>${kw}</strong>":<br>✅ Buenos: ${buenos} &nbsp; ⚠️ Regulares: ${regulares} &nbsp; ❌ Malos: ${malos}`, 'assistant', [
+                    { label: '📋 Mostrar en tabla', handler: () => { filterTableWith(keywords[0]); addMessage(`Filtrando tabla por "<strong>${kw}</strong>". 👇`, 'assistant'); } }
+                ]);
+            } else {
+                // Respuesta general con botones de acción
+                addMessage(`Encontré <strong>${matchedItems.length}</strong> ítems relacionados con "<strong>${kw}</strong>". ¿Qué quieres hacer?`, 'assistant', [
+                    { label: '📋 Mostrar en tabla', handler: () => { filterTableWith(keywords[0]); addMessage(`Filtrando tabla por "<strong>${kw}</strong>". 👇`, 'assistant'); } },
+                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kw) },
+                    { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(matchedItems, kw) }
+                ]);
             }
         }
+
 
 
         sendAi.addEventListener('click', () => {
