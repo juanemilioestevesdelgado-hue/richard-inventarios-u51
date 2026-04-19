@@ -753,4 +753,74 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // --- AI Assistant Logic ---
+    const aiBtn = document.getElementById('ai-assistant-btn');
+    const aiContainer = document.getElementById('ai-assistant-container');
+    const closeAi = document.getElementById('close-ai');
+    const aiInput = document.getElementById('ai-input');
+    const sendAi = document.getElementById('send-ai');
+    const aiMessages = document.getElementById('ai-messages');
+
+    if (aiBtn) {
+        aiBtn.addEventListener('click', () => aiContainer.classList.toggle('hidden'));
+        closeAi.addEventListener('click', () => aiContainer.classList.add('hidden'));
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = `ai-message ${sender}`;
+            div.innerHTML = text;
+            aiMessages.appendChild(div);
+            aiMessages.scrollTop = aiMessages.scrollHeight;
+        }
+
+        async function processAiQuery(query) {
+            const q = query.toLowerCase();
+            let response = "";
+
+            if (q.includes("cuantos") || q.includes("cuántos") || q.includes("cantidad")) {
+                const cleanQuery = q.replace(/cuantos|cuántos|hay|de|un|una|tramos|trama|cantidad|metros|metro/g, "").trim();
+                const keywords = cleanQuery.split(" ").filter(w => w.length > 1);
+                
+                const matches = currentInventoryData.filter(item => {
+                    const desc = (item.descripcion || "").toLowerCase();
+                    const code = (item.codigo || "").toLowerCase();
+                    return keywords.every(kw => desc.includes(kw) || code.includes(kw));
+                });
+
+                if (matches.length > 0) {
+                    response = `He encontrado **${matches.length}** ítems que coinciden.`;
+                } else {
+                    response = "No encontré ítems con esa descripción. Intenta ser más específico.";
+                }
+            } else if (q.includes("donde") || q.includes("dónde") || q.includes("ubicacion") || q.includes("ubicación")) {
+                const cleanQuery = q.replace(/donde|dónde|está|esta|el|la|los|las|ubicacion|ubicación/g, "").trim();
+                const match = currentInventoryData.find(item => 
+                    item.codigo.toLowerCase().includes(cleanQuery) || 
+                    (item.descripcion || "").toLowerCase().includes(cleanQuery)
+                );
+                if (match) {
+                    response = `El ítem **${match.descripcion}** (${match.codigo}) está en: **${match.ubicacion || 'No especificada'}**.`;
+                } else {
+                    response = "No encontré el ítem solicitado.";
+                }
+            } else {
+                response = "Puedo ayudarte a contar ítems (ej: 'cuantos tramos de 1m') o buscar su ubicación.";
+            }
+
+            setTimeout(() => addMessage(response, 'assistant'), 500);
+        }
+
+        sendAi.addEventListener('click', () => {
+            const text = aiInput.value.trim();
+            if (!text) return;
+            addMessage(text, 'user');
+            aiInput.value = '';
+            processAiQuery(text);
+        });
+
+        aiInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendAi.click();
+        });
+    }
+
 }); // End of DOMContentLoaded

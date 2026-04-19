@@ -246,6 +246,33 @@
             </form>
         </div>
     </div>
+    <!-- IA Assistant Floating Button -->
+    <div id="ai-assistant-btn" title="Asistente Inteligente">
+        <i class="ph ph-sparkle"></i>
+    </div>
+
+    <!-- IA Assistant Container -->
+    <div id="ai-assistant-container" class="hidden">
+        <div class="ai-assistant-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="ph ph-sparkle" style="color: #6366f1;"></i>
+                <span>Asistente de Inventario</span>
+            </div>
+            <button id="close-ai" style="background: none; border: none; cursor: pointer; color: #666;"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="ai-assistant-messages" id="ai-messages">
+            <div class="ai-message assistant">
+                Hola! Soy tu asistente. Puedes preguntarme cosas como:
+                <br>• "¿Cuantos tramos de manguera hay?"
+                <br>• "¿Donde está el monitor?"
+                <br>• "¿Que items estan en mal estado?"
+            </div>
+        </div>
+        <div class="ai-assistant-input">
+            <input type="text" id="ai-input" placeholder="Hazme una pregunta...">
+            <button id="send-ai"><i class="ph ph-paper-plane-right"></i></button>
+        </div>
+    </div>
 
     <script type="module" src="/app.js"></script>
 </body>
