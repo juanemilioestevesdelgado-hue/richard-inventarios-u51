@@ -40,6 +40,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modalImg = document.getElementById('modal-image');
     const closeModal = document.querySelector('.close-modal');
 
+    let currentInventoryData = [];
+    const searchInput = document.getElementById('search-input');
+
     tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Cargando inventario desde Firebase...</td></tr>';
 
     // Real-time listener
@@ -57,23 +60,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        const inventoryData = [];
+        currentInventoryData = [];
         snapshot.forEach((docSnap) => {
-            inventoryData.push({ id: docSnap.id, ...docSnap.data() });
+            currentInventoryData.push({ id: docSnap.id, ...docSnap.data() });
         });
 
         // Sort data by codigo to keep numbering stable
-        inventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
+        currentInventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
 
-        totalItemsEl.textContent = inventoryData.length;
-        reviewedCount = inventoryData.filter(item => item.revisado).length;
+        totalItemsEl.textContent = currentInventoryData.length;
+        reviewedCount = currentInventoryData.filter(item => item.revisado).length;
         reviewedItemsEl.textContent = reviewedCount;
         
+        // Apply current filter
+        const filter = searchInput.value.toLowerCase();
+        const filteredData = currentInventoryData.filter(item => 
+            (item.descripcion || '').toLowerCase().includes(filter) ||
+            (item.codigo || '').toLowerCase().includes(filter)
+        );
+
         // Save current focus to restore it later
         const activeElementId = document.activeElement ? document.activeElement.id : null;
         const cursorPosition = document.activeElement ? document.activeElement.selectionStart : null;
 
-        renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
+        renderTable(filteredData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
 
         // Restore focus if it was a comment or status
         if (activeElementId) {
@@ -88,6 +98,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, (error) => {
         console.error("Snapshot error:", error);
         tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; color: red;">Error en tiempo real. Revisa la consola.</td></tr>';
+    });
+
+    // Search input listener
+    searchInput.addEventListener('input', () => {
+        const filter = searchInput.value.toLowerCase();
+        const filteredData = currentInventoryData.filter(item => 
+            (item.descripcion || '').toLowerCase().includes(filter) ||
+            (item.codigo || '').toLowerCase().includes(filter)
+        );
+        renderTable(filteredData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
     });
 
     function renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg) {

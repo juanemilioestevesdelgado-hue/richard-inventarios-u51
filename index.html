@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/jpg" href="logo.jpg">
     <title>Inventario - 5ta Brigada</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Google Fonts for modern typography -->
@@ -32,9 +33,17 @@
 <body>
     <div class="app-container">
         <header class="header">
-            <div class="header-content">
-                <h1><i class="ph ph-package"></i> INVENTARIO U30</h1>
-                <p>Gestión y revisión de equipos</p>
+            <div class="header-content" style="display: flex; align-items: center; gap: 1.5rem;">
+                <img src="logo.jpg" alt="Logo Bomberos" style="width: 70px; height: auto; border-radius: 8px;">
+                <div>
+                    <h1>INVENTARIO U30</h1>
+                    <p>Gestión y revisión de equipos</p>
+                </div>
+            </div>
+            
+            <div class="search-container" style="flex: 1; max-width: 350px; margin: 0 1rem; position: relative;">
+                <i class="ph ph-magnifying-glass" style="position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary);"></i>
+                <input type="text" id="search-input" placeholder="Buscar por nombre..." style="width: 100%; padding: 0.6rem 1rem 0.6rem 2.2rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--bg-primary); font-family: inherit; font-size: 0.9rem;">
             </div>
             <div class="stats">
                 <div class="stat-card">
