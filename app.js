@@ -6,6 +6,7 @@ import {
     getFirestore, 
     collection, 
     getDocs, 
+    onSnapshot,
     doc, 
     setDoc, 
     updateDoc, 
@@ -41,37 +42,62 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Cargando inventario desde Firebase...</td></tr>';
 
-    try {
-        const inventoryRef = collection(db, "inventory");
-        const querySnapshot = await getDocs(inventoryRef);
-
-        if (querySnapshot.empty) {
+    // Real-time listener
+    onSnapshot(collection(db, "inventory"), (snapshot) => {
+        if (snapshot.empty) {
             console.log("Database is empty. Populating...");
             tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Inicializando base de datos por primera vez...</td></tr>';
+            // One-time populate if empty
             const batch = writeBatch(db);
             fullInventory.forEach((item) => {
                 const docRef = doc(db, "inventory", item.codigo);
                 batch.set(docRef, { ...item, estado: "", revisado: false, comentarios: "", fotoUrl: "" });
             });
-            await batch.commit();
-            window.location.reload();
+            batch.commit();
             return;
         }
 
         const inventoryData = [];
-        querySnapshot.forEach((docSnap) => {
+        snapshot.forEach((docSnap) => {
             inventoryData.push({ id: docSnap.id, ...docSnap.data() });
         });
+
+        // Sort data by codigo to keep numbering stable
+        inventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
 
         totalItemsEl.textContent = inventoryData.length;
         reviewedCount = inventoryData.filter(item => item.revisado).length;
         reviewedItemsEl.textContent = reviewedCount;
+        
+        // Save current focus to restore it later
+        const activeElementId = document.activeElement ? document.activeElement.id : null;
+        const cursorPosition = document.activeElement ? document.activeElement.selectionStart : null;
+
+        renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
+
+        // Restore focus if it was a comment or status
+        if (activeElementId) {
+            const el = document.getElementById(activeElementId);
+            if (el) {
+                el.focus();
+                if (cursorPosition !== null && typeof el.setSelectionRange === 'function') {
+                    el.setSelectionRange(cursorPosition, cursorPosition);
+                }
+            }
+        }
+    }, (error) => {
+        console.error("Snapshot error:", error);
+        tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; color: red;">Error en tiempo real. Revisa la consola.</td></tr>';
+    });
+
+    function renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg) {
         tableBody.innerHTML = '';
 
         inventoryData.forEach((item, index) => {
             const tr = document.createElement('tr');
             tr.id = `row-${item.id}`;
             if (item.revisado) tr.classList.add('completed');
+
 
             tr.innerHTML = `
                 <td data-label="#" style="text-align: center; font-weight: bold; color: var(--accent);">${index + 1}</td>
@@ -275,10 +301,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
         });
-
-    } catch (error) {
-        console.error("Error initializing Firebase/Data:", error);
-        tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; color: red;">Error cargando datos. Revisa la consola.</td></tr>';
     }
 
     // Close modal
