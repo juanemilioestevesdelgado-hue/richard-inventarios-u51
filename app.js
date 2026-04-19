@@ -335,9 +335,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const val = e.target.value;
                 if (val) {
                     const parts = val.split('-');
-                    if (parts[0] && parts[0].length > 4) {
-                        parts[0] = parts[0].substring(0, 4);
-                        e.target.value = parts.join('-');
+                    if (parts[0] && parts[0].length >= 4) {
+                        if (parts[0].length > 4) {
+                            parts[0] = parts[0].substring(0, 4);
+                            e.target.value = parts.join('-');
+                        }
+                        // Solo desenfocamos si el año está completo para evitar que sigan escribiendo infinitamente
+                        e.target.blur();
                     }
                 }
             });
