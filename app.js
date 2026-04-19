@@ -788,34 +788,67 @@ document.addEventListener('DOMContentLoaded', async () => {
             aiMessages.appendChild(typingDiv);
             aiMessages.scrollTop = aiMessages.scrollHeight;
 
-            try {
-                // Verificar que hay datos cargados
-                if (!currentInventoryData || currentInventoryData.length === 0) {
-                    typingDiv.remove();
-                    addMessage("⚠️ Aún no se han cargado los datos del inventario. Espera un momento y vuelve a intentarlo.", 'assistant');
-                    return;
+            if (!currentInventoryData || currentInventoryData.length === 0) {
+                typingDiv.remove();
+                addMessage("⚠️ Los datos del inventario aún no han cargado. Espera un momento e intenta de nuevo.", 'assistant');
+                return;
+            }
+
+            // ── BÚSQUEDA LOCAL INTELIGENTE ────────────────────────────
+            // Normalizamos: quitamos acentos y pasamos a singular básico
+            function norm(str) {
+                let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
+                else if (s.endsWith("s") && s.length > 3) s = s.slice(0, -1);
+                return s;
+            }
+
+            const stopWords = new Set(['cuanto','cuantos','cuanta','cuantas','donde','hay','de','el','la','los','las','un','una','que','en','esta','estan','son','es','me','mi','tu','su','como','cual','tienen','tienen','cuales','tengo','tiene','total','cantidad','cuál','dónde','están']);
+            const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const keywords = qNorm.split(/[\s¿?.,!]+/).map(norm).filter(w => w.length > 2 && !stopWords.has(w));
+
+            // Detectar intención
+            const wantsCount   = /cuanto|cuantos|cantidad|total|numero/.test(qNorm);
+            const wantsLocation = /donde|ubicacion|lugar|encuentra/.test(qNorm);
+            const wantsStatus  = /estado|condicion|mal|regular|buen/.test(qNorm);
+
+            // Filtrar items que coincidan con alguna keyword
+            const matchedItems = currentInventoryData.filter(item => {
+                const desc = norm(item.descripcion);
+                const cod  = norm(item.codigo);
+                const loc  = norm(item.ubicacion);
+                return keywords.some(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
+            });
+
+            let localAnswer = null;
+
+            if (keywords.length > 0) {
+                if (matchedItems.length === 0) {
+                    localAnswer = `No encontré ningún ítem en el inventario que coincida con tu búsqueda ("${keywords.join(', ')}"). 🔍 Verifica cómo aparece en la lista.`;
+                } else if (wantsCount) {
+                    localAnswer = `📦 Hay <strong>${matchedItems.length}</strong> ítem(s) relacionados con <strong>"${keywords.join(' ')}"</strong> en el inventario.`;
+                } else if (wantsLocation) {
+                    const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
+                    localAnswer = `📍 Los ítems de <strong>"${keywords.join(' ')}"</strong> (${matchedItems.length} en total) se encuentran en: <strong>${locs.join(', ')}</strong>.`;
+                } else if (wantsStatus) {
+                    const buenos   = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'bueno').length;
+                    const regulares = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'regular').length;
+                    const malos    = matchedItems.filter(i => (i.estado||'').toLowerCase() === 'malo').length;
+                    localAnswer = `📊 Estado de los <strong>${matchedItems.length}</strong> ítems de "<strong>${keywords.join(' ')}</strong>":<br>✅ Buenos: ${buenos} &nbsp; ⚠️ Regulares: ${regulares} &nbsp; ❌ Malos: ${malos}`;
                 }
+            }
 
-                // Preparamos los datos del inventario para la IA
-                const inventorySummary = currentInventoryData.map(i => ({
-                    codigo: i.codigo || '',
-                    descripcion: i.descripcion || '',
-                    ubicacion: i.ubicacion || 'No especificada',
-                    estado: i.estado || 'No especificado'
-                }));
+            // Si tenemos respuesta local directa, la mostramos sin llamar a la API
+            if (localAnswer) {
+                typingDiv.remove();
+                addMessage(localAnswer, 'assistant');
+                return;
+            }
 
-                const systemPrompt = `Eres un asistente de inventario para bomberos. Tienes acceso al siguiente inventario en formato JSON. DEBES responder basándote ÚNICAMENTE en estos datos reales.
-
-INVENTARIO: ${JSON.stringify(inventorySummary)}
-
-REGLAS:
-- Responde siempre en español, de manera amigable y con emojis.
-- Si preguntan "cuántos [ITEM]", filtra el inventario por descripcion que contenga palabras similares (piton/pitones, manguera/mangueras, etc.) y cuenta los resultados. Muestra el número exacto.
-- Si preguntan "dónde está [ITEM]", busca en el inventario y muestra la ubicación.
-- Si preguntan por el estado, agrupa por estado (bueno/regular/malo).
-- Si no encuentras el ítem, dilo claramente.
-- Considera sinónimos y formas plurales/singulares al buscar.
-- Sé conciso y directo.`;
+            // ── CONSULTA A LA IA (solo para preguntas generales/complejas) ──
+            try {
+                // Solo enviamos un resumen pequeño, no todo el inventario
+                const summary = `Total ítems: ${currentInventoryData.length}. Tipos de equipo: ${[...new Set(currentInventoryData.map(i => (i.descripcion||'').split(' ')[0]))].slice(0,30).join(', ')}.`;
 
                 const response = await fetch('https://text.pollinations.ai/', {
                     method: 'POST',
@@ -823,25 +856,25 @@ REGLAS:
                     body: JSON.stringify({
                         model: 'openai',
                         messages: [
-                            { role: 'system', content: systemPrompt },
+                            { role: 'system', content: `Eres un asistente de inventario de una estación de bomberos. Resumen del inventario: ${summary}. Responde en español, con emojis, de manera amigable y profesional.` },
                             { role: 'user', content: query }
                         ]
                     })
                 });
 
-                if (!response.ok) throw new Error('Error en la API de IA');
-                
-                const aiResponseText = await response.text();
-
+                if (!response.ok) throw new Error('API error');
+                let text = await response.text();
+                // Eliminar avisos de la API si vienen
+                text = text.replace(/⚠️[\s\S]{0,300}normally\./g, '').trim();
+                if (!text) text = "Lo siento, no pude procesar tu consulta en este momento. Intenta de nuevo. 🤖";
                 typingDiv.remove();
-                addMessage(aiResponseText.replace(/\n/g, '<br>'), 'assistant');
-
-            } catch (error) {
-                console.error("Error AI:", error);
+                addMessage(text.replace(/\n/g, '<br>'), 'assistant');
+            } catch(e) {
                 typingDiv.remove();
-                addMessage("Lo siento, mis servidores de inteligencia artificial están un poco saturados ahora mismo. Intenta de nuevo en unos segundos. 🤖🔌", 'assistant');
+                addMessage("🤖 No pude conectarme al servicio de IA en este momento. Intenta de nuevo en unos segundos.", 'assistant');
             }
         }
+
 
         sendAi.addEventListener('click', () => {
             const text = aiInput.value.trim();
