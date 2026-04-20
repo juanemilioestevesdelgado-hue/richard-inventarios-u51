@@ -1,15 +1,15 @@
 import { inventoryU51, inventoryCC51, inventoryT51 } from './data.js?v=3';
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { 
-    getFirestore, 
-    collection, 
-    getDocs, 
+import {
+    getFirestore,
+    collection,
+    getDocs,
     onSnapshot,
-    doc, 
-    setDoc, 
-    updateDoc, 
-    writeBatch 
+    doc,
+    setDoc,
+    updateDoc,
+    writeBatch
 } from "firebase/firestore";
 
 const inventoryMap = {
@@ -24,13 +24,13 @@ let fullInventory = inventoryMap[currentUnit];
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBDSvuzugExjjWS6wHhdoEXGeeNPz5FulY",
-  authDomain: "inventario-u51.firebaseapp.com",
-  projectId: "inventario-u51",
-  storageBucket: "inventario-u51.firebasestorage.app",
-  messagingSenderId: "520794533760",
-  appId: "1:520794533760:web:10fd8b7cd0bea3d3401b65",
-  measurementId: "G-EQFSQH4GEL"
+    apiKey: "AIzaSyBDSvuzugExjjWS6wHhdoEXGeeNPz5FulY",
+    authDomain: "inventario-u51.firebaseapp.com",
+    projectId: "inventario-u51",
+    storageBucket: "inventario-u51.firebasestorage.app",
+    messagingSenderId: "520794533760",
+    appId: "1:520794533760:web:10fd8b7cd0bea3d3401b65",
+    measurementId: "G-EQFSQH4GEL"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -77,10 +77,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentCollection = `inventory_${unit.toLowerCase()}`;
         fullInventory = inventoryMap[unit];
         mainTitle.textContent = `INVENTARIO ${unit}`;
-        
+
         splashScreen.classList.add('hidden');
         appContainer.classList.add('visible');
-        
+
         startRealtimeListener();
     };
 
@@ -105,7 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function startRealtimeListener() {
         if (unsubscribe) unsubscribe();
-        
+
         tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center;">Conectando con la base de datos...</td></tr>';
 
         unsubscribe = onSnapshot(collection(db, currentCollection), (snapshot) => {
@@ -128,13 +128,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             snapshot.forEach((docSnap) => {
                 const item = { id: docSnap.id, ...docSnap.data() };
-                
+
                 if (item.revisado && item.proximaRevision && item.proximaRevision.trim() !== '' && item.proximaRevision < todayStr) {
                     item.revisado = false;
                     batchUpdate.update(doc(db, currentCollection, item.id), { revisado: false, ultimaRevision: "" });
                     hasExpired = true;
                 }
-                
+
                 currentInventoryData.push(item);
             });
 
@@ -142,14 +142,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 batchUpdate.commit().catch(e => console.error("Error auto-unchecking:", e));
             }
 
-            currentInventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, {numeric: true, sensitivity: 'base'}));
+            currentInventoryData.sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true, sensitivity: 'base' }));
 
             totalItemsEl.textContent = currentInventoryData.length;
             reviewedCount = currentInventoryData.filter(item => item.revisado).length;
             reviewedItemsEl.textContent = reviewedCount;
-            
+
             const filter = searchInput.value.toLowerCase();
-            const filteredData = currentInventoryData.filter(item => 
+            const filteredData = currentInventoryData.filter(item =>
                 (item.descripcion || '').toLowerCase().includes(filter) ||
                 (item.codigo || '').toLowerCase().includes(filter)
             );
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Search input listener
     searchInput.addEventListener('input', () => {
         const filter = searchInput.value.toLowerCase();
-        const filteredData = currentInventoryData.filter(item => 
+        const filteredData = currentInventoryData.filter(item =>
             (item.descripcion || '').toLowerCase().includes(filter) ||
             (item.codigo || '').toLowerCase().includes(filter)
         );
@@ -269,23 +269,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             const checkbox = tr.querySelector(`#check-${item.id}`);
             checkbox.addEventListener('change', async (e) => {
                 const isChecked = e.target.checked;
-                
+
 
 
                 const updateData = { revisado: isChecked };
-                
-                if (isChecked) { 
-                    tr.classList.add('completed'); 
-                    reviewedCount++; 
+
+                if (isChecked) {
+                    tr.classList.add('completed');
+                    reviewedCount++;
                     // Set current date as Last Review if not already set or whenever checked
                     const today = new Date().toISOString().split('T')[0];
                     updateData.ultimaRevision = `${today} por ${inventariador}`;
-                } else { 
-                    tr.classList.remove('completed'); 
-                    reviewedCount--; 
+                } else {
+                    tr.classList.remove('completed');
+                    reviewedCount--;
                     updateData.ultimaRevision = "";
                 }
-                
+
                 reviewedItemsEl.textContent = reviewedCount;
                 await updateDoc(doc(db, currentCollection, item.id), updateData);
             });
@@ -689,7 +689,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         10: { cellWidth: 15, halign: 'center' }, 11: { cellWidth: 15, halign: 'center' },
                         12: { cellWidth: 25 }
                     },
-                    didDrawCell: function(data) {
+                    didDrawCell: function (data) {
                         if (data.column.index === 0 && data.cell.section === 'body') {
                             const base64 = data.row.raw[0];
                             if (base64 && base64.startsWith('data:image')) {
@@ -699,7 +699,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             }
                         }
                     },
-                    didParseCell: function(data) {
+                    didParseCell: function (data) {
                         if (data.column.index === 0 && data.cell.section === 'body') data.cell.text = '';
                     }
                 });
@@ -823,7 +823,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 styles: { fontSize: 7.5, valign: 'middle', halign: 'left', overflow: 'linebreak' },
                 headStyles: { fillColor: [99, 102, 241], halign: 'center', fontSize: 7.5, fontStyle: 'bold' }
             });
-            pdfDoc.save(`inventario_${titulo.replace(/\s+/g,'_')}.pdf`);
+            pdfDoc.save(`inventario_${titulo.replace(/\s+/g, '_')}.pdf`);
             addMessage(`✅ ¡PDF listo! Se han descargado <strong>${items.length}</strong> ítems de "${titulo}". 📄`, 'assistant');
         }
 
@@ -844,7 +844,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const worksheet = XLSX.utils.json_to_sheet(excelData);
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Filtrado");
-            XLSX.writeFile(workbook, `inventario_${titulo.replace(/\s+/g,'_')}.xlsx`);
+            XLSX.writeFile(workbook, `inventario_${titulo.replace(/\s+/g, '_')}.xlsx`);
             addMessage(`✅ ¡Excel listo!`, 'assistant');
         }
 
@@ -875,14 +875,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['tipo','tipos','clase','clases','cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
+            const stopWords = new Set(['tipo', 'tipos', 'clase', 'clases', 'cuanto', 'cuantos', 'donde', 'hay', 'de', 'el', 'la', 'los', 'las', 'un', 'una', 'que', 'en', 'son', 'es', 'me', 'mi', 'tu', 'su', 'como', 'cual', 'tengo', 'tiene', 'total', 'cantidad', 'muestramelo', 'muestrame', 'mostrar', 'muestra', 'descarga', 'descargar', 'descargalo', 'descargala', 'pdf', 'excel', 'quiero', 'ver', 'lista', 'listar', 'dame', 'dime', 'solo', 'nada', 'todos', 'todas', 'del', 'al', 'por', 'para', 'con', 'sin', 'hya', 'hay', 'aqui', 'alla', 'este', 'esta']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
             // Action detection
             const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
-            const isPDF        = /\bpdf\b/.test(qNorm);
-            const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
-            
+            const isPDF = /\bpdf\b/.test(qNorm);
+            const isExcel = /\bexcel\b|\bxls\b/.test(qNorm);
+
             // Extract Keywords
             const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length >= 1);
             const keywords = words.map(norm).filter(w => w.length > 0 && !stopWords.has(w));
@@ -894,8 +894,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (keywords.length > 0) {
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
-                    const cod  = norm(item.codigo);
-                    const loc  = norm(item.ubicacion);
+                    const cod = norm(item.codigo);
+                    const loc = norm(item.ubicacion);
                     return keywords.every(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
                 if (matchedItems.length > 0) {
@@ -907,7 +907,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Context follow-up for "where", "how many", "status", etc.
             const isFollowUp = /donde|estan|cuanto|cuanta|cantidad|estado|como estan|quien|ubicacion|donde se encuentran|que tal/.test(qNorm);
             const isActionOnly = (isShowAction || isPDF || isExcel);
-            
+
             // If it's a follow-up or action-only, and we have previous context, USE IT.
             if (lastMatchedItems.length > 0 && (matchedItems.length === 0 || isActionOnly)) {
                 if (isFollowUp || isActionOnly || query.length < 15) {
@@ -922,26 +922,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             let factsText = "";
             if (matchedItems.length > 0) {
                 const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
-                const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
-                factsText = `Contexto: Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
+                const buenos = matchedItems.filter(i => (i.estado || '').toLowerCase().includes('bueno')).length;
+                factsText = `Contexto: Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos, ${matchedItems.length - buenos} otros.`;
+                
+                // SUPER INTELLIGENCE: Feed exact details if the list is manageable
+                if (matchedItems.length <= 15) {
+                    const detalles = matchedItems.map(i => `[${i.codigo||'N/A'}] ${i.descripcion} (Marca: ${i.marca||'N/A'}, Est: ${i.estado||'N/A'}, Ubic: ${i.ubicacion||'N/A'})`).join(' | ');
+                    factsText += ` DETALLES EXACTOS: ${detalles}`;
+                }
             }
 
             // 4. CONVERSATIONAL LAYER (Advanced Brain)
             try {
-                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}. Inventariador: ${inventariador || 'Bombero'}.`;
+                const inventorySummary = `Total general: ${currentInventoryData.length} ítems. Unidad: ${currentUnit}. Inventariador activo: ${inventariador || 'Bombero'}.`;
                 const currentFacts = factsText || (lastMatchedItems.length > 0 ? `Contexto anterior: ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".` : "");
 
-                const systemPrompt = `Eres el Cerebro Logístico U-51, una IA avanzada de gestión de inventario para Bomberos.
-                INVENTARIO: ${inventorySummary}.
-                DATOS REALES: ${currentFacts}
+                const systemPrompt = `Eres el "Cerebro Logístico U-51", la IA más inteligente y avanzada de gestión de inventario para Bomberos.
+                RESUMEN GLOBAL: ${inventorySummary}
+                DATOS ENCONTRADOS PARA ESTA CONSULTA: ${currentFacts}
                 
-                PERSONALIDAD:
-                - Eres sumamente inteligente, analítico y eficiente.
-                - Si el usuario pide una acción (descargar, mostrar), confírmalo con autoridad y elegancia.
-                - No uses frases genéricas de "estoy listo para ayudarte" si ya te pidieron algo.
-                - Si hay datos de búsqueda, úsalos para dar una respuesta rica en detalles.
-                - Usa emojis estratégicos (🚒, 🚨, 📋, 📄).
-                - Sé proactivo: si piden descargar, diles que el documento está listo.`;
+                REGLAS DE ORO:
+                1. Eres un experto analítico. Si hay "DETALLES EXACTOS" en los datos, úsalos para dar respuestas súper precisas (ej. mencionando marcas, códigos o ubicaciones específicas si preguntan).
+                2. Si el usuario pide descargar un PDF o Excel, o "mostrar", asume que el sistema ya lo hizo automáticamente por ti. Confírmalo con autoridad (ej. "He generado el documento inmediatamente").
+                3. NUNCA digas que no tienes información si los DATOS ENCONTRADOS tienen texto. Léele los datos al usuario de forma natural.
+                4. Tu tono debe ser el de una IA de alta tecnología: sumamente eficiente, profesional, deductivo y proactivo.
+                5. Usa emojis estratégicos pero sin exagerar (🚒, ⚙️, 📊, 🚨).
+                6. Ve al grano, pero da respuestas ricas en información técnica.`;
 
                 chatHistory.push({ role: 'user', content: query });
                 if (chatHistory.length > 20) chatHistory.shift();
@@ -961,13 +967,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }),
                     signal: controller.signal
                 });
-                
+
                 clearTimeout(timeoutId);
                 if (!response.ok) throw new Error("API Error");
 
                 let rawText = await response.text();
                 let cleanText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
-                
+
                 // Fallback inteligente
                 if (factsText && (!cleanText || cleanText.length < 5 || cleanText.includes("no tengo información"))) {
                     cleanText = `He analizado los registros y aquí tienes los detalles: ${factsText} ¿Deseas que genere un reporte completo? 🚒`;
@@ -975,7 +981,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 typingDiv.remove();
                 chatHistory.push({ role: 'assistant', content: cleanText });
-                
+
                 // --- PROACTIVE ACTIONS ---
                 if (matchedItems.length > 0) {
                     if (isPDF) await downloadFilteredPDF(matchedItems, kwStr || 'consulta');
@@ -990,7 +996,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ] : [
                     { label: '🔄 Ver Todo', handler: () => filterTableWith('') }
                 ];
-                
+
                 addMessage(cleanText.replace(/\n/g, '<br>'), 'assistant', actions);
 
             } catch (err) {
