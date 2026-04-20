@@ -875,7 +875,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
+            const stopWords = new Set(['cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
             // Action detection
@@ -884,7 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
             
             // Extract Keywords
-            const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length >= 1); // Permite números como "2"
+            const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length >= 1);
             const keywords = words.map(norm).filter(w => w.length > 0 && !stopWords.has(w));
 
             console.log("Keywords extracted:", keywords);
@@ -896,7 +896,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const desc = norm(item.descripcion);
                     const cod  = norm(item.codigo);
                     const loc  = norm(item.ubicacion);
-                    // Búsqueda más precisa: todos los keywords deben estar presentes (AND logic)
                     return keywords.every(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
                 if (matchedItems.length > 0) {
@@ -909,10 +908,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isFollowUp = /donde|estan|cuanto|cuanta|cantidad|estado|como estan|quien|ubicacion|donde se encuentran|que tal/.test(qNorm);
             const isActionOnly = (isShowAction || isPDF || isExcel);
             
-            // If it's a follow-up and we have context, keep the context
-            if (keywords.length === 0 && lastMatchedItems.length > 0 && (isFollowUp || isActionOnly || query.length < 15)) {
-                matchedItems = lastMatchedItems;
-                console.log("Using lastMatchedItems as context for follow-up.");
+            // If it's a follow-up or action-only, and we have previous context, USE IT.
+            if (lastMatchedItems.length > 0 && (matchedItems.length === 0 || isActionOnly)) {
+                if (isFollowUp || isActionOnly || query.length < 15) {
+                    matchedItems = lastMatchedItems;
+                    console.log("Using lastMatchedItems as context.");
+                }
             }
 
             // 3. PRE-PROCESS FACTS (Deterministic Intelligence)
@@ -922,27 +923,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (matchedItems.length > 0) {
                 const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
                 const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
-                factsText = `Encontré ${matchedItems.length} ítems de "${kwStr}". Están en: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
+                factsText = `Contexto: Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
             }
 
             // 4. CONVERSATIONAL LAYER (Advanced Brain)
             try {
                 const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}. Inventariador: ${inventariador || 'Bombero'}.`;
-                
-                // CRITICAL: We ALWAYS pass the best available facts to the AI
                 const currentFacts = factsText || (lastMatchedItems.length > 0 ? `Contexto anterior: ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".` : "");
 
-                const systemPrompt = `Eres el Asistente Inteligente U-51. Eres un experto en inventario y logística de Bomberos.
-                INVENTARIO ACTUAL: ${inventorySummary}.
-                DATOS DE BÚSQUEDA: ${currentFacts}
+                const systemPrompt = `Eres el Cerebro Logístico U-51, una IA avanzada de gestión de inventario para Bomberos.
+                INVENTARIO: ${inventorySummary}.
+                DATOS REALES: ${currentFacts}
                 
-                TU MISIÓN:
-                1. Responde SIEMPRE de forma profesional y con mucha iniciativa.
-                2. Si el usuario pregunta "dónde" o "cuántos" y tienes DATOS DE BÚSQUEDA, dáselos con precisión.
-                3. Usa emojis bomberiles (🚒, 🚨, 👨–👨‍🚒).
-                4. Si el usuario te saluda o charla, responde con carisma pero mantente enfocado en el inventario.
-                5. NUNCA digas "no tengo información" si tienes DATOS DE BÚSQUEDA arriba.
-                6. Sé breve, útil y eficiente.`;
+                PERSONALIDAD:
+                - Eres sumamente inteligente, analítico y eficiente.
+                - Si el usuario pide una acción (descargar, mostrar), confírmalo con autoridad y elegancia.
+                - No uses frases genéricas de "estoy listo para ayudarte" si ya te pidieron algo.
+                - Si hay datos de búsqueda, úsalos para dar una respuesta rica en detalles.
+                - Usa emojis estratégicos (🚒, 🚨, 📋, 📄).
+                - Sé proactivo: si piden descargar, diles que el documento está listo.`;
 
                 chatHistory.push({ role: 'user', content: query });
                 if (chatHistory.length > 20) chatHistory.shift();
@@ -969,18 +968,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let rawText = await response.text();
                 let cleanText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
                 
-                // INTELIGENCIA DE SEGURIDAD: Si la IA falla en dar los datos, se los inyectamos nosotros
-                if (factsText && (!cleanText || cleanText.toLowerCase().includes("no tengo información") || cleanText.toLowerCase().includes("no encontré"))) {
-                    cleanText = `¡Claro! Tengo la información aquí: ${factsText} ¿Qué más deseas saber? 🚒`;
-                }
-
-                if (!cleanText || cleanText.length < 2) {
-                    cleanText = factsText || "¡Hola! Estoy listo para ayudarte con el inventario. ¿Qué buscas hoy? 🚒";
+                // Fallback inteligente
+                if (factsText && (!cleanText || cleanText.length < 5 || cleanText.includes("no tengo información"))) {
+                    cleanText = `He analizado los registros y aquí tienes los detalles: ${factsText} ¿Deseas que genere un reporte completo? 🚒`;
                 }
 
                 typingDiv.remove();
                 chatHistory.push({ role: 'assistant', content: cleanText });
                 
+                // --- PROACTIVE ACTIONS ---
+                if (matchedItems.length > 0) {
+                    if (isPDF) await downloadFilteredPDF(matchedItems, kwStr || 'consulta');
+                    if (isExcel) downloadFilteredExcel(matchedItems, kwStr || 'consulta');
+                    if (isShowAction) filterTableWith(filterTerm);
+                }
+
                 let actions = matchedItems.length > 0 ? [
                     { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
                     { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
@@ -994,7 +996,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error("AI Error:", err);
                 typingDiv.remove();
-                const emergencyMsg = factsText ? `🚨 Mi enlace central está saturado, pero localmente veo esto: ${factsText}` : "🚒 Perdona, mi sistema de comunicación está en mantenimiento. ¿Podemos intentar con palabras clave?";
+                const emergencyMsg = factsText ? `🚨 Sistema de lenguaje con latencia, pero datos recuperados: ${factsText}` : "🚒 Perdona, mi núcleo de procesamiento está ocupado. Intenta con una búsqueda directa.";
                 addMessage(emergencyMsg, 'assistant');
             }
         }
