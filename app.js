@@ -852,17 +852,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             addMessage(`✅ ¡Excel listo! Se han exportado <strong>${items.length}</strong> ítems de "${titulo}". 📊`, 'assistant');
         }
 
+        // AI Context & History
+        let chatHistory = [];
+        let lastMatchedItems = [];
+        let lastKeywords = [];
+
         async function processAiQuery(query) {
-            console.log("AI Query received:", query);
+            console.log("Processing AI Query:", query);
             const typingDiv = document.createElement('div');
             typingDiv.className = 'ai-message assistant';
             typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
             
-            // Expand messages area if closed
             aiMessages.style.padding = '1.5rem';
             aiMessages.style.maxHeight = '500px';
             aiMessages.style.overflowY = 'auto';
-            
             aiMessages.appendChild(typingDiv);
             aiMessages.scrollTop = aiMessages.scrollHeight;
 
@@ -874,7 +877,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             function norm(str) {
                 let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                // Basic plural to singular
                 if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
                 else if (s.endsWith("s") && s.length > 3) s = s.slice(0, -1);
                 return s;
@@ -883,101 +885,122 @@ document.addEventListener('DOMContentLoaded', async () => {
             const stopWords = new Set(['cuanto','cuantos','cuanta','cuantas','donde','hay','de','el','la','los','las','un','una','que','en','esta','estan','son','es','me','mi','tu','su','como','cual','tienen','cuales','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-            // Action detection
+            // 1. DETECTION (Local Action)
             const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
             const isPDF        = /\bpdf\b/.test(qNorm);
             const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
-            const wantsCount   = /cuanto|cuantos|cantidad|total|numero/.test(qNorm);
-            const wantsLocation= /donde|ubicacion|lugar|encuentra/.test(qNorm);
-            const wantsStatus  = /estado|condicion|mal|regular|buen/.test(qNorm);
-
-            // Item keywords (words that are not stop words)
+            
+            // Extract Keywords
             const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length > 2);
             const keywords = words.map(norm).filter(w => !stopWords.has(w));
 
-            console.log("Keywords extracted:", keywords);
-
-            // 1. Search for items if keywords are present
+            // 2. SEARCH (Local Data Extraction)
             let matchedItems = [];
             if (keywords.length > 0) {
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
                     const cod  = norm(item.codigo);
                     const loc  = norm(item.ubicacion);
-                    // Match if any keyword is found in desc, code or location
                     return keywords.some(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
-
                 if (matchedItems.length > 0) {
-                    // Update context
                     lastMatchedItems = matchedItems;
                     lastKeywords = keywords;
                 }
             }
 
-            // 2. If it's an action-only query (e.g., "muéstramelos"), use last context
+            // Context follow-up
             const isActionOnly = (isShowAction || isPDF || isExcel) && keywords.length === 0;
             if (isActionOnly && lastMatchedItems.length > 0) {
                 matchedItems = lastMatchedItems;
-                console.log("Using context items:", matchedItems.length);
             }
 
-            typingDiv.remove();
-
-            // 3. Handle cases
-            
-            // Greetings or help
-            if (/hola|buenos|buenas|saludo|ayuda/.test(qNorm) && keywords.length === 0) {
-                addMessage("¡Hola! 😊 Soy tu asistente inteligente. Puedo 🔢 contar, 📍 ubicar, 📊 ver estados, 📋 filtrar la tabla o 📄 descargar PDF/Excel de lo que busques. ¿En qué te ayudo?", 'assistant');
-                return;
-            }
-
-            if (matchedItems.length === 0) {
-                if (keywords.length === 0) {
-                    addMessage("No entendí qué ítem buscas. Prueba algo como: <i>'¿Cuántos pitones hay?'</i> o <i>'Descarga PDF de mangueras'</i>. 🚒", 'assistant');
-                } else {
-                    addMessage(`No encontré ítems que coincidan con "<strong>${keywords.join(', ')}</strong>". 🔍 Verifica el nombre o código.`, 'assistant');
-                }
-                return;
-            }
-
+            // 3. EXECUTE LOCAL COMMANDS (If they are explicit actions)
             const kwStr = (keywords.length > 0 ? keywords : lastKeywords).join(' ');
             const filterTerm = (keywords.length > 0 ? keywords[0] : lastKeywords[0]);
 
-            if (isPDF) {
-                await downloadFilteredPDF(matchedItems, kwStr);
-            } else if (isExcel) {
-                downloadFilteredExcel(matchedItems, kwStr);
-            } else if (isShowAction) {
-                filterTableWith(filterTerm);
-                addMessage(`📋 He filtrado la tabla para mostrar los <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>".`, 'assistant', [
-                    { label: '🔄 Ver todo', handler: () => { filterTableWith(''); addMessage('Filtro limpiado. 📋', 'assistant'); } },
-                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
-                    { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
-                ]);
-            } else if (wantsCount) {
-                addMessage(`📦 Hay <strong>${matchedItems.length}</strong> ítem(s) de "<strong>${kwStr}</strong>" en el inventario.`, 'assistant', [
-                    { label: '📋 Mostrar en tabla', handler: () => { filterTableWith(filterTerm); addMessage(`Filtrando por "${kwStr}"...`, 'assistant'); } },
-                    { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) }
-                ]);
-            } else if (wantsLocation) {
-                const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
-                addMessage(`📍 Los <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>" están en: <strong>${locs.join(', ')}</strong>.`, 'assistant', [
-                    { label: '📋 Mostrar en tabla', handler: () => filterTableWith(filterTerm) }
-                ]);
-            } else if (wantsStatus) {
-                const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
-                const regulares = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('regular')).length;
-                const malos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('malo')).length;
-                addMessage(`📊 Estado de <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>":<br>✅ Buenos: ${buenos} | ⚠️ Regulares: ${regulares} | ❌ Malos: ${malos}`, 'assistant', [
-                    { label: '📋 Ver en tabla', handler: () => filterTableWith(filterTerm) }
-                ]);
-            } else {
-                addMessage(`Encontré <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>". ¿Qué deseas hacer?`, 'assistant', [
-                    { label: '📋 Mostrar en tabla', handler: () => filterTableWith(filterTerm) },
-                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
-                    { label: '📊 Descargar Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
-                ]);
+            if (matchedItems.length > 0) {
+                if (isPDF) { typingDiv.remove(); await downloadFilteredPDF(matchedItems, kwStr); return; }
+                if (isExcel) { typingDiv.remove(); downloadFilteredExcel(matchedItems, kwStr); return; }
+                if (isShowAction) {
+                    typingDiv.remove();
+                    filterTableWith(filterTerm);
+                    addMessage(`📋 He filtrado la tabla para mostrar los <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>".`, 'assistant', [
+                        { label: '🔄 Ver todo', handler: () => { filterTableWith(''); addMessage('Filtro limpiado. 📋', 'assistant'); } },
+                        { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) }
+                    ]);
+                    return;
+                }
+            }
+
+            // 4. CONVERSATIONAL LAYER (Using LLM with Local Facts)
+            try {
+                // Prepare context for the AI
+                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad actual: ${currentUnit}. Inventariador: ${userName || 'Desconocido'}.`;
+                let facts = "";
+                if (matchedItems.length > 0) {
+                    const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
+                    const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
+                    facts = `SOBRE LA CONSULTA: Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
+                } else if (keywords.length > 0) {
+                    facts = `SOBRE LA CONSULTA: No encontré nada para "${keywords.join(', ')}". Sugiere revisar el nombre.`;
+                }
+
+                const systemPrompt = `Eres un asistente experto de inventario de Bomberos (Estación U-51). 
+                Eres amable, profesional y eficiente. 
+                RESUMEN: ${inventorySummary}. 
+                ${facts}
+                REGLAS:
+                - Responde de forma conversacional y natural.
+                - Si el usuario te saluda, salúdalo por su nombre (${userName || 'Bombero'}).
+                - Si encontraste ítems, menciona los datos que te pasé (cantidad, ubicación, estado).
+                - Mantén tus respuestas breves y con emojis bomberiles. 🚒👨‍🚒
+                - NO menciones avisos técnicos ni APIs.`;
+
+                // Add to history
+                chatHistory.push({ role: 'user', content: query });
+                if (chatHistory.length > 10) chatHistory.shift();
+
+                const response = await fetch('https://text.pollinations.ai/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            ...chatHistory
+                        ],
+                        model: 'openai',
+                        seed: 42
+                    })
+                });
+
+                if (!response.ok) throw new Error("AI Error");
+                
+                let aiText = await response.text();
+                // Strip Pollinations warnings
+                aiText = aiText.replace(/⚠️[\s\S]{0,500}normally\./g, '').trim();
+                
+                typingDiv.remove();
+                
+                // Add AI response to history
+                chatHistory.push({ role: 'assistant', content: aiText });
+                
+                // Final display with action buttons if items were found
+                let actions = [];
+                if (matchedItems.length > 0) {
+                    actions = [
+                        { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
+                        { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
+                        { label: '📊 Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
+                    ];
+                }
+                
+                addMessage(aiText.replace(/\n/g, '<br>'), 'assistant', actions);
+
+            } catch (err) {
+                console.error(err);
+                typingDiv.remove();
+                addMessage("🚒 Lo siento, mi procesador conversacional está ocupado. Pero localmente te digo: " + (facts || "No encontré lo que buscas."), 'assistant');
             }
         }
 
