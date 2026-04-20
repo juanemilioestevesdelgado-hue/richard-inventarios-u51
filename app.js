@@ -968,8 +968,66 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
+            // ─── LOCAL INTELLIGENCE ENGINE (Primary — no cloud needed) ────────
+            function buildLocalResponse(items, intent, kwStr, query) {
+                if (items.length === 0) {
+                    if (intent.greet) return `¡Hola ${inventariador || 'Bombero'}! 👋 Soy el Cerebro Logístico U-51. Puedo buscar ítems, darte estadísticas, clasificar equipos y generar reportes. ¿Qué necesitas? 🚒`;
+                    return null; // No local response possible without items
+                }
+
+                const locs   = [...new Set(items.map(i => i.ubicacion || 'Sin ubicación'))];
+                const buenos = items.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
+                const malos  = items.filter(i => (i.estado||'').toLowerCase().includes('malo')).length;
+                const marcas = [...new Set(items.map(i => i.marca || 'N/A'))];
+
+                // ── CLASSIFY: Group by brand/type ─────────────────────────────
+                if (intent.classify) {
+                    const byMarca = {};
+                    items.forEach(i => {
+                        const m = i.marca || 'Sin marca';
+                        if (!byMarca[m]) byMarca[m] = [];
+                        byMarca[m].push(i.descripcion);
+                    });
+                    let resp = `📊 Clasificación de los ${items.length} ítems de "${kwStr}":\n\n`;
+                    Object.entries(byMarca).forEach(([marca, descs]) => {
+                        // Group identical descriptions
+                        const counts = {};
+                        descs.forEach(d => { counts[d] = (counts[d]||0)+1; });
+                        const lines = Object.entries(counts).map(([d,n]) => `  • ${n}x ${d}`).join('\n');
+                        resp += `🔹 Marca ${marca} (${descs.length} unidades):\n${lines}\n\n`;
+                    });
+                    resp += `📍 Todos en: ${locs.join(', ')} ⚙️`;
+                    return resp;
+                }
+
+                // ── ANALYZE: Statistics ───────────────────────────────────────
+                if (intent.analyze) {
+                    let resp = `📈 Análisis de "${kwStr}" — ${items.length} ítems totales:\n`;
+                    resp += `  ✅ En buen estado: ${buenos}\n`;
+                    resp += `  ⚠️ Mal estado: ${malos}\n`;
+                    resp += `  ❓ Sin especificar: ${items.length - buenos - malos}\n`;
+                    resp += `  🏷️ Marcas: ${marcas.join(', ')}\n`;
+                    resp += `  📍 Ubicación: ${locs.join(', ')}`;
+                    return resp;
+                }
+
+                // ── LOCATION query ────────────────────────────────────────────
+                if (/donde|ubicacion|estan/.test(query.toLowerCase())) {
+                    return `📍 Los ${items.length} ítems de "${kwStr}" están en: **${locs.join(', ')}**. Marcas presentes: ${marcas.join(', ')}. 🚒`;
+                }
+
+                // ── DEFAULT: Count + summary ──────────────────────────────────
+                const byDesc = {};
+                items.forEach(i => { byDesc[i.descripcion] = (byDesc[i.descripcion]||0)+1; });
+                const topItems = Object.entries(byDesc).slice(0, 4).map(([d,n]) => `${n}x ${d}`).join(', ');
+                return `🚒 Encontré **${items.length} ítems** de "${kwStr}" en ${locs.join(', ')}.\nPrincipales: ${topItems}${Object.keys(byDesc).length > 4 ? '...' : '.'}\nMarcas: ${marcas.join(', ')}. Estado: ${buenos} buenos, ${malos} malos, ${items.length-buenos-malos} sin datos.`;
+            }
+
             // ─── AI CONVERSATIONAL BRAIN ──────────────────────────────────────
             try {
+                // STEP 1: Generate smart local response first
+                const localResponse = buildLocalResponse(matchedItems, INTENTS, kwStr, query);
+
                 const inventorySummary = `Inventario ${currentUnit}: ${currentInventoryData.length} ítems totales. Inventariador: ${inventariador || 'Bombero'}.`;
                 const dataContext      = factsText || (lastMatchedItems.length > 0
                     ? `Contexto previo: ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".`
@@ -979,51 +1037,60 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const systemPrompt = `Eres "Cerebro Logístico U-51", una IA avanzada de inventario para Bomberos.
 INVENTARIO: ${inventorySummary}
 DATOS ACTUALES: ${dataContext}
-INTENCIÓN DETECTADA DEL USUARIO: ${intentContext}
+INTENCIÓN DEL USUARIO: ${intentContext}
 
 INSTRUCCIONES ABSOLUTAS:
-1. INTENCIÓN "classify" o "analyze": Lee los DETALLES POR ÍTEM y haz un análisis real. Agrupa por marca, modelo o característica. Sé específico y detallado.
-2. INTENCIÓN "download_pdf" o "download_excel": El sistema ya generó el archivo automáticamente. Confírmalo con profesionalismo.
-3. INTENCIÓN "show_table": El sistema ya filtró la tabla. Confirma y describe lo que se muestra.
-4. NUNCA muestres los DETALLES en formato crudo. Conviértelos en análisis legible y natural.
-5. Si hay datos, ÚSALOS. Jamás digas "no tengo información" si los DATOS ACTUALES tienen contenido.
-6. Tono: IA avanzada — precisa, eficiente, proactiva. Emojis escasos pero certeros (🚒⚙️📊).
-7. Responde en español. Máximo 5 líneas a menos que el análisis requiera más.`;
+1. Si la intención es "classify" o "analyze": Agrupa y analiza los DETALLES POR ÍTEM. Da un resumen inteligente por marca/tipo.
+2. Si la intención incluye "download_pdf" o "download_excel": Confirma que el archivo fue generado automáticamente.
+3. NUNCA muestres los datos en formato crudo. Conviértelos en lenguaje natural analítico.
+4. Tono: IA avanzada, profesional, proactivo. Emojis precisos (🚒⚙️📊).
+5. Responde en español. Conciso pero rico en información.`;
 
                 chatHistory.push({ role: 'user', content: query });
                 if (chatHistory.length > 20) chatHistory.shift();
 
-                const controller = new AbortController();
-                const timeoutId  = setTimeout(() => controller.abort(), 15000);
+                // STEP 2: Try to enhance with cloud AI (with short timeout)
+                let finalText = localResponse;
+                try {
+                    const controller = new AbortController();
+                    const timeoutId  = setTimeout(() => controller.abort(), 8000);
 
-                const response = await fetch('https://text.pollinations.ai/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            ...chatHistory
-                        ],
-                        model: 'openai'
-                    }),
-                    signal: controller.signal
-                });
+                    const response = await fetch('https://text.pollinations.ai/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: [
+                                { role: 'system', content: systemPrompt },
+                                ...chatHistory
+                            ],
+                            model: 'openai'
+                        }),
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
 
-                clearTimeout(timeoutId);
-                if (!response.ok) throw new Error("API Error");
+                    if (response.ok) {
+                        const rawText   = await response.text();
+                        const cloudText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
+                        // Only use cloud response if it's actually meaningful
+                        if (cloudText && cloudText.length > 20 && !cloudText.toLowerCase().includes('no tengo información')) {
+                            finalText = cloudText;
+                        }
+                    }
+                } catch (_) {
+                    // Cloud failed silently — local response is used
+                    console.log("Cloud AI unavailable — using local intelligence.");
+                }
 
-                let rawText   = await response.text();
-                let cleanText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
-
-                // Only use fallback if AI truly returned nothing useful
-                if (!cleanText || cleanText.length < 5) {
-                    cleanText = factsText
-                        ? `⚙️ Sistema de lenguaje temporalmente saturado. Datos recuperados localmente:\n${factsText}`
-                        : "🚒 No encontré información sobre eso. Prueba con otro término de búsqueda.";
+                // STEP 3: Final safety net
+                if (!finalText) {
+                    finalText = matchedItems.length === 0
+                        ? "🔍 No encontré ítems con ese criterio. Prueba con otro término (ej: 'manguera', 'hacha', 'piton')."
+                        : `📋 ${matchedItems.length} ítems encontrados de "${kwStr}" en ${[...new Set(matchedItems.map(i=>i.ubicacion))].join(', ')}.`;
                 }
 
                 typingDiv.remove();
-                chatHistory.push({ role: 'assistant', content: cleanText });
+                chatHistory.push({ role: 'assistant', content: finalText });
 
                 // Proactive actions (execute automatically)
                 if (matchedItems.length > 0) {
@@ -1040,7 +1107,7 @@ INSTRUCCIONES ABSOLUTAS:
                     { label: '🔄 Ver Todo', handler: () => filterTableWith('') }
                 ];
 
-                addMessage(cleanText.replace(/\n/g, '<br>'), 'assistant', actions);
+                addMessage(finalText.replace(/\n/g, '<br>'), 'assistant', actions);
 
             } catch (err) {
                 console.error("AI Error:", err);
