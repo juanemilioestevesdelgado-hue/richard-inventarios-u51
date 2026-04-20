@@ -845,168 +845,93 @@ document.addEventListener('DOMContentLoaded', async () => {
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Filtrado");
             XLSX.writeFile(workbook, `inventario_${titulo.replace(/\s+/g,'_')}.xlsx`);
-            addMessage(`✅ ¡Excel listo! Se han exportado <strong>${items.length}</strong> ítems de "${titulo}". 📊`, 'assistant');
+            addMessage(`✅ ¡Excel listo!`, 'assistant');
         }
 
-        // AI Context & History
         let chatHistory = [];
         let lastMatchedItems = [];
         let lastKeywords = [];
 
         async function processAiQuery(query) {
-            console.log("Processing AI Query:", query);
             const typingDiv = document.createElement('div');
             typingDiv.className = 'ai-message assistant';
             typingDiv.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
-            
             aiMessages.style.padding = '1.5rem';
-            aiMessages.style.maxHeight = '500px';
-            aiMessages.style.overflowY = 'auto';
+            aiMessages.style.maxHeight = '800px';
             aiMessages.appendChild(typingDiv);
             aiMessages.scrollTop = aiMessages.scrollHeight;
 
             if (!currentInventoryData || currentInventoryData.length === 0) {
                 typingDiv.remove();
-                addMessage("⚠️ Los datos del inventario aún no han cargado. Espera un momento.", 'assistant');
+                addMessage("⚠️ Los datos aún no han cargado.", 'assistant');
                 return;
             }
 
-            function norm(str) {
-                let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
-                else if (s.endsWith("s") && s.length > 3) s = s.slice(0, -1);
-                return s;
-            }
-
-            const stopWords = new Set(['cuanto','cuantos','cuanta','cuantas','donde','hay','de','el','la','los','las','un','una','que','en','esta','estan','son','es','me','mi','tu','su','como','cual','tienen','cuales','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
-            const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-            // 1. DETECTION (Local Action)
+            function norm(str) { return (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+            const stopWords = new Set(['cuanto','cuantos','de','el','la','los','las','un','una','que','en','es','son','es','me','mi','como','cual','tengo','tiene','total','cantidad','muestramelo','mostrar','muestra','descarga','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','por','para','con','sin','hay','este','esta']);
+            const qNorm = norm(query);
             const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
-            const isPDF        = /\bpdf\b/.test(qNorm);
-            const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
-            
-            // Extract Keywords
+            const isPDF = /\bpdf\b/.test(qNorm);
+            const isExcel = /\bexcel\b|\bxls\b/.test(qNorm);
             const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length > 2);
-            const keywords = words.map(norm).filter(w => !stopWords.has(w));
+            const keywords = words.filter(w => !stopWords.has(w));
 
-            // 2. SEARCH (Local Data Extraction)
             let matchedItems = [];
             if (keywords.length > 0) {
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
-                    const cod  = norm(item.codigo);
-                    const loc  = norm(item.ubicacion);
+                    const cod = norm(item.codigo);
+                    const loc = norm(item.ubicacion);
                     return keywords.some(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
-                if (matchedItems.length > 0) {
-                    lastMatchedItems = matchedItems;
-                    lastKeywords = keywords;
-                }
-            }
-
-            // Context follow-up
-            const isActionOnly = (isShowAction || isPDF || isExcel) && keywords.length === 0;
-            if (isActionOnly && lastMatchedItems.length > 0) {
+                if (matchedItems.length > 0) { lastMatchedItems = matchedItems; lastKeywords = keywords; }
+            } else if ((isShowAction || isPDF || isExcel) && lastMatchedItems.length > 0) {
                 matchedItems = lastMatchedItems;
             }
 
-            // 3. EXECUTE LOCAL COMMANDS (If they are explicit actions)
             const kwStr = (keywords.length > 0 ? keywords : lastKeywords).join(' ');
             const filterTerm = (keywords.length > 0 ? keywords[0] : lastKeywords[0]);
 
             if (matchedItems.length > 0) {
-                if (isPDF) { typingDiv.remove(); await downloadFilteredPDF(matchedItems, kwStr); return; }
-                if (isExcel) { typingDiv.remove(); downloadFilteredExcel(matchedItems, kwStr); return; }
+                if (isPDF) { typingDiv.remove(); await downloadFilteredPDF(matchedItems, kwStr || 'consulta'); return; }
+                if (isExcel) { typingDiv.remove(); downloadFilteredExcel(matchedItems, kwStr || 'consulta'); return; }
                 if (isShowAction) {
                     typingDiv.remove();
                     filterTableWith(filterTerm);
-                    addMessage(`📋 He filtrado la tabla para mostrar los <strong>${matchedItems.length}</strong> ítems de "<strong>${kwStr}</strong>".`, 'assistant', [
-                        { label: '🔄 Ver todo', handler: () => { filterTableWith(''); addMessage('Filtro limpiado. 📋', 'assistant'); } },
+                    addMessage(`📋 Filtrado para <strong>${matchedItems.length}</strong> ítems.`, 'assistant', [
+                        { label: '🔄 Ver todo', handler: () => { filterTableWith(''); } },
                         { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) }
                     ]);
                     return;
                 }
             }
 
-            // 4. CONVERSATIONAL LAYER (Using LLM with Local Facts)
             try {
-                console.log("Fact-checking for AI...", facts || "No items found");
-                
-                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad actual: ${currentUnit}. Inventariador: ${inventariador || 'Bombero'}.`;
-                
-                const systemPrompt = `Eres un asistente de inventario de Bomberos (Estación U-51) de clase mundial.
-                Personalidad: Eficiente, inteligente, proactivo y muy profesional.
-                CONTEXTO: ${inventorySummary}.
-                ${facts ? "DATOS REALES ENCONTRADOS: " + facts : "No hay ítems específicos en esta consulta local."}
-                
-                INSTRUCCIONES:
-                1. Responde de forma natural y fluida. 
-                2. Si hay datos reales, úsalos para responder con precisión absoluta.
-                3. Si el usuario te saluda, sé cordial y menciónalo: "${inventariador || 'Bombero'}".
-                4. Usa emojis bomberiles (🚒, 🚒, 👨‍🚒, 🧯) de forma elegante.
-                5. Si no encontraste nada, sugiere buscar con palabras más simples o por código.
-                6. MANTÉN LA RESPUESTA BREVE Y ÚTIL. No divagues.
-                7. NUNCA menciones que eres una IA o limitaciones técnicas.`;
+                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}.`;
+                let facts = matchedItems.length > 0 ? `Encontrados ${matchedItems.length} ítems.` : "";
+                const systemPrompt = `Asistente de Bomberos (U-51). Breve, amable, profesional. RESUMEN: ${inventorySummary}. ${facts} REGLAS: Saluda, emojis bomberiles, preciso.`;
 
-                chatHistory.push({ role: 'user', content: query });
-                if (chatHistory.length > 12) chatHistory.shift();
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-                const response = await fetch('https://text.pollinations.ai/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        messages: [
-                            { role: 'system', content: systemPrompt },
-                            ...chatHistory
-                        ],
-                        model: 'openai',
-                        jsonMode: false // We want text
-                    })
-                });
+                const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(query)}?system=${encodeURIComponent(systemPrompt)}&model=openai`, { signal: controller.signal });
+                clearTimeout(timeoutId);
 
-                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-                
+                if (!response.ok) throw new Error("API Error");
                 let aiResponseText = await response.text();
-                
-                // Limpiar basura de la respuesta si existe
-                aiResponseText = aiResponseText.replace(/⚠️[\s\S]{0,500}normally\./g, '').trim();
-                
-                // Si la respuesta parece JSON (OpenAI format), extraer el contenido
-                if (aiResponseText.startsWith('{')) {
-                    try {
-                        const json = JSON.parse(aiResponseText);
-                        if (json.choices && json.choices[0] && json.choices[0].message) {
-                            aiResponseText = json.choices[0].message.content;
-                        } else if (json.content) {
-                            aiResponseText = json.content;
-                        }
-                    } catch (e) { console.warn("Not JSON after all"); }
-                }
-
                 typingDiv.remove();
-                chatHistory.push({ role: 'assistant', content: aiResponseText });
                 
-                let actions = [];
-                if (matchedItems.length > 0) {
-                    actions = [
-                        { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
-                        { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
-                        { label: '📊 Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
-                    ];
-                }
+                let actions = matchedItems.length > 0 ? [
+                    { label: '📋 Ver', handler: () => filterTableWith(filterTerm) },
+                    { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) }
+                ] : [];
                 
                 addMessage(aiResponseText.replace(/\n/g, '<br>'), 'assistant', actions);
-
             } catch (err) {
-                console.error("AI Brain Error:", err);
                 typingDiv.remove();
-                const fallback = facts ? `Lo siento, hubo un problema de conexión, pero encontré esto: ${facts}` : "🚒 Perdona, mi sistema de comunicación está saturado. ¿Puedes intentarlo de nuevo en un momento?";
-                addMessage(fallback, 'assistant');
+                addMessage("🚒 Perdona, tiempo de espera agotado. ¿Intentamos de nuevo?", 'assistant');
             }
         }
-
-
 
         sendAi.addEventListener('click', () => {
             const text = aiInput.value.trim();
