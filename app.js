@@ -867,72 +867,76 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            function norm(str) { return (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
-            const stopWords = new Set(['cuanto','cuantos','de','el','la','los','las','un','una','que','en','es','son','es','me','mi','como','cual','tengo','tiene','total','cantidad','muestramelo','mostrar','muestra','descarga','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','por','para','con','sin','hay','este','esta']);
-            const qNorm = norm(query);
-            const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
-            const isPDF = /\bpdf\b/.test(qNorm);
-            const isExcel = /\bexcel\b|\bxls\b/.test(qNorm);
-            const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length > 2);
-            const keywords = words.filter(w => !stopWords.has(w));
+            // 1. ADVANCED NORMALIZATION (Plural to Singular)
+            function norm(str) {
+                let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
+                else if (s.endsWith("s") && s.length > 3) s = s.slice(0, -1);
+                return s;
+            }
 
+            const stopWords = new Set(['cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
+            const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+            // Action detection
+            const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
+            const isPDF        = /\bpdf\b/.test(qNorm);
+            const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
+            
+            // Extract Keywords
+            const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length > 2);
+            const keywords = words.map(norm).filter(w => !stopWords.has(w));
+
+            console.log("Keywords extracted:", keywords);
+
+            // 2. SEARCH (Local Data Extraction)
             let matchedItems = [];
             if (keywords.length > 0) {
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
-                    const cod = norm(item.codigo);
-                    const loc = norm(item.ubicacion);
+                    const cod  = norm(item.codigo);
+                    const loc  = norm(item.ubicacion);
                     return keywords.some(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
-                if (matchedItems.length > 0) { lastMatchedItems = matchedItems; lastKeywords = keywords; }
-            } else if ((isShowAction || isPDF || isExcel) && lastMatchedItems.length > 0) {
+                if (matchedItems.length > 0) {
+                    lastMatchedItems = matchedItems;
+                    lastKeywords = keywords;
+                }
+            }
+
+            // Context follow-up
+            const isActionOnly = (isShowAction || isPDF || isExcel) && keywords.length === 0;
+            if (isActionOnly && lastMatchedItems.length > 0) {
                 matchedItems = lastMatchedItems;
             }
 
+            // 3. PRE-PROCESS FACTS (Deterministic Intelligence)
             const kwStr = (keywords.length > 0 ? keywords : lastKeywords).join(' ');
             const filterTerm = (keywords.length > 0 ? keywords[0] : lastKeywords[0]);
-
+            let factsText = "";
             if (matchedItems.length > 0) {
-                if (isPDF) { typingDiv.remove(); await downloadFilteredPDF(matchedItems, kwStr || 'consulta'); return; }
-                if (isExcel) { typingDiv.remove(); downloadFilteredExcel(matchedItems, kwStr || 'consulta'); return; }
-                if (isShowAction) {
-                    typingDiv.remove();
-                    filterTableWith(filterTerm);
-                    addMessage(`📋 Filtrado para <strong>${matchedItems.length}</strong> ítems.`, 'assistant', [
-                        { label: '🔄 Ver todo', handler: () => { filterTableWith(''); } },
-                        { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) }
-                    ]);
-                    return;
-                }
+                const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
+                const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
+                factsText = `He encontrado ${matchedItems.length} ítems de "${kwStr}". Están en: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
             }
 
+            // 4. CONVERSATIONAL LAYER
             try {
-                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}.`;
-                let factsText = "";
-                if (matchedItems.length > 0) {
-                    const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
-                    const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
-                    factsText = `Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
-                }
-
-                // AI SYSTEM PROMPT - More intelligent and professional
-                const systemPrompt = `Eres el Asistente Inteligente de la Estación de Bomberos U-51.
-                Tu objetivo es ayudar al usuario (${inventariador || 'Bombero'}) con el inventario.
-                DATOS REALES DEL MOMENTO: ${inventorySummary}. ${factsText}
+                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}. Inventariador: ${inventariador || 'Bombero'}.`;
                 
-                REGLAS DE ORO:
-                1. Sé extremadamente profesional, amable y eficiente.
-                2. USA LOS DATOS REALES que te pasé para dar respuestas precisas.
-                3. Responde de forma conversacional (ej: "¡Hola ${inventariador}! He encontrado lo que buscas...").
-                4. Usa emojis de bomberos y emergencias (🚒, 👨‍🚒, 🧯, 🚨).
-                5. NUNCA menciones temas técnicos, APIs, ni el aviso de Pollinations.
-                6. Si no hay datos reales, sé honesto pero proactivo: "No encuentro eso específicamente, ¿quieres que busquemos por otra categoría?".
-                7. MANTÉN LA RESPUESTA BREVE Y AL PUNTO.`;
+                const systemPrompt = `Eres el Asistente Inteligente de la Estación U-51. 
+                RESUMEN: ${inventorySummary}. ${factsText ? "FACTS: " + factsText : "No encontré items específicos."}
+                REGLAS:
+                - Responde de forma muy profesional y amable.
+                - Si hay FACTS, úsalos para responder.
+                - Si el usuario te saluda, dile "¡Hola ${inventariador}!".
+                - Usa emojis bomberiles. 🚒
+                - NUNCA menciones APIs ni errores.
+                - RESPUESTA CORTA Y ÚTIL.`;
 
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-                // Use the new clean method (POST with specific cleaning)
                 const response = await fetch('https://text.pollinations.ai/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -941,8 +945,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: query }
                         ],
-                        model: 'openai',
-                        cache: false
+                        model: 'openai'
                     }),
                     signal: controller.signal
                 });
@@ -951,27 +954,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!response.ok) throw new Error("API Error");
 
                 let rawText = await response.text();
-                console.log("Raw AI Response:", rawText);
-
-                // --- AGGRESSIVE CLEANER ---
-                // Removes the "IMPORTANT NOTICE" and any other Pollinations-specific metadata
-                let cleanText = rawText
-                    .replace(/⚠️[\s\S]*?normally\./gi, '') // Remove the specific warning
-                    .replace(/The Pollinations[\s\S]*?normally\./gi, '') // Double safety
-                    .replace(/\[MODELS\][\s\S]*?$/g, '') // Remove model list if appended
-                    .replace(/#+[\s\S]*?Normally/gi, '') // Remove markdown headers with the warning
-                    .trim();
-
-                // If the response is empty after cleaning, use a fallback
+                
+                // Aggressive cleaning of warnings
+                let cleanText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
+                
+                // If AI is empty or weird, use local facts directly
                 if (!cleanText || cleanText.length < 5) {
-                    cleanText = factsText ? `¡Hola! He procesado tu consulta. ${factsText} ¿Qué más deseas hacer?` : "¡Hola! Estoy listo para ayudarte con el inventario de la U-51. ¿Qué buscas hoy?";
+                    cleanText = factsText ? `¡Hola! Aquí tienes la información: ${factsText}` : "No he encontrado información sobre eso. ¿Deseas buscar otra cosa?";
                 }
 
                 typingDiv.remove();
                 
                 let actions = matchedItems.length > 0 ? [
-                    { label: '📋 Mostrar en Tabla', handler: () => filterTableWith(filterTerm) },
-                    { label: '📄 Descargar PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
+                    { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
+                    { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
                     { label: '📊 Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
                 ] : [
                     { label: '🔄 Ver Todo', handler: () => filterTableWith('') }
@@ -982,9 +978,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error("AI Error:", err);
                 typingDiv.remove();
-                // Fallback deterministic intelligence
-                const fallbackMsg = factsText ? `He detectado un problema de red, pero mis registros locales muestran: ${factsText}` : "🚒 Perdona, mi sistema central está fuera de línea. ¿Puedes intentar con palabras clave como 'pitones' o 'mangueras'?";
-                addMessage(fallbackMsg, 'assistant');
+                addMessage(factsText || "🚒 Perdona, tengo problemas de conexión. ¿Puedes intentar de nuevo?", 'assistant');
             }
         }
 
