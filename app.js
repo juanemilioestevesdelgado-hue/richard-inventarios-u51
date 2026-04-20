@@ -1321,12 +1321,13 @@ INSTRUCCIONES ABSOLUTAS:
             aiInput.value = '';
 
             // ─── MULTI-QUERY SUPPORT ───────────────────────────────────
-            // Split on ' y ' conjunction to handle compound questions
-            // e.g. "cuantos tramos hay y que tipo de pitones" → 2 queries
-            const subQueries = text.split(/\s+y\s+(?=(?:cuant|que|donde|como|cual|tipo|clasific|muestr|descarg|analiz))/i).map(s => s.trim()).filter(Boolean);
+            // Only split on ' y ' when followed by a question word + a NEW item noun
+            // e.g. "cuantos tramos hay y cuantos pitones" → 2 queries
+            // BUT  "cuantos tramos hay y que tipo" → stays as 1 query (same topic)
+            const multiPattern = /\s+y\s+(?=(cuant\w*|donde|busca)\s+\w+)/i;
+            const subQueries = text.split(multiPattern).map(s => s.trim()).filter(s => s.length > 3);
             
             if (subQueries.length > 1) {
-                // Process each sub-query sequentially
                 (async () => {
                     for (const sq of subQueries) {
                         await processAiQuery(sq);
