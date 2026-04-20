@@ -764,10 +764,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const aiMessages = document.getElementById('ai-messages');
 
     if (aiInput && sendAi && aiMessages) {
-        // Contexto de la última búsqueda para comandos de seguimiento
-        let lastMatchedItems = [];
-        let lastKeywords = [];
-
         function addMessage(text, sender, actions = []) {
             const div = document.createElement('div');
             div.className = `ai-message ${sender}`;
@@ -936,7 +932,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 4. CONVERSATIONAL LAYER (Using LLM with Local Facts)
             try {
                 // Prepare context for the AI
-                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad actual: ${currentUnit}. Inventariador: ${userName || 'Desconocido'}.`;
+                const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad actual: ${currentUnit}. Inventariador: ${inventariador || 'Desconocido'}.`;
                 let facts = "";
                 if (matchedItems.length > 0) {
                     const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
@@ -952,7 +948,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ${facts}
                 REGLAS:
                 - Responde de forma conversacional y natural.
-                - Si el usuario te saluda, salúdalo por su nombre (${userName || 'Bombero'}).
+                - Si el usuario te saluda, salúdalo por su nombre (${inventariador || 'Bombero'}).
                 - Si encontraste ítems, menciona los datos que te pasé (cantidad, ubicación, estado).
                 - Mantén tus respuestas breves y con emojis bomberiles. 🚒👨‍🚒
                 - NO menciones avisos técnicos ni APIs.`;
