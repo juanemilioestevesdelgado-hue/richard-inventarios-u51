@@ -1127,9 +1127,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const malos  = items.filter(i => (i.estado||'').toLowerCase().includes('malo')).length;
                 const marcas = [...new Set(items.map(i => i.marca || 'N/A'))];
 
-                // Group by exact description (used in multiple paths)
+                // Normalize descriptions for grouping: TRAMO = TRAMOS for ANY word
+                function normalizeDesc(d) {
+                    return (d || '').toUpperCase().trim()
+                        .replace(/\s+/g, ' ')
+                        // Universal singular: strip trailing S/ES from each word > 4 chars
+                        .split(' ').map(w => {
+                            if (w.length > 4 && w.endsWith('ES') && !w.endsWith('ISES')) return w.slice(0, -2);
+                            if (w.length > 3 && w.endsWith('S') && !w.endsWith('SS')) return w.slice(0, -1);
+                            return w;
+                        }).join(' ');
+                }
+
+                // Group by normalized description (merges TRAMO/TRAMOS etc.)
                 const byDesc = {};
-                items.forEach(i => { byDesc[i.descripcion] = (byDesc[i.descripcion]||0)+1; });
+                const descLabel = {}; // keep best display label
+                items.forEach(i => {
+                    const key = normalizeDesc(i.descripcion);
+                    byDesc[key] = (byDesc[key]||0)+1;
+                    if (!descLabel[key]) descLabel[key] = i.descripcion;
+                });
                 const uniqueTypes = Object.keys(byDesc).length;
 
                 // ── CLASSIFY: Group by brand/type ─────────────────────────────
@@ -1138,11 +1155,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     items.forEach(i => {
                         const m = i.marca || 'Sin marca';
                         if (!byMarca[m]) byMarca[m] = [];
-                        byMarca[m].push(i.descripcion);
+                        byMarca[m].push(normalizeDesc(i.descripcion));
                     });
                     let resp = `📊 Clasificación de los ${items.length} ítems de "${kwStr}":\n\n`;
                     Object.entries(byMarca).forEach(([marca, descs]) => {
-                        // Group identical descriptions
                         const counts = {};
                         descs.forEach(d => { counts[d] = (counts[d]||0)+1; });
                         const lines = Object.entries(counts).map(([d,n]) => `  • ${n}x ${d}`).join('\n');
@@ -1172,17 +1188,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // byDesc and uniqueTypes are already computed above
 
                 if (uniqueTypes === 1) {
-                    // All same type — simple answer
-                    const [desc, count] = Object.entries(byDesc)[0];
-                    return `🚒 Hay **${count} unidades** de ${desc}. Ubicación: ${locs.join(', ')}. Marcas: ${marcas.join(', ')}.`;
+                    const [key, count] = Object.entries(byDesc)[0];
+                    return `🚒 Hay **${count} unidades** de ${key}. Ubicación: ${locs.join(', ')}. Marcas: ${marcas.join(', ')}.`;
                 }
 
                 // Multiple sub-types → show breakdown
                 let resp = `🚒 Encontré **${items.length} ítems** de "${kwStr}" en ${locs.join(', ')} — divididos en ${uniqueTypes} subtipos:\n\n`;
                 Object.entries(byDesc)
                     .sort((a, b) => b[1] - a[1])
-                    .forEach(([desc, count]) => {
-                        resp += `  🔹 ${count}x ${desc}\n`;
+                    .forEach(([key, count]) => {
+                        resp += `  🔹 ${count}x ${key}\n`;
                     });
                 resp += `\n🏷️ Marcas: ${marcas.join(', ')}. Estado: ${buenos} buenos, ${malos} mal estado, ${items.length-buenos-malos} sin especificar.`;
                 return resp;
