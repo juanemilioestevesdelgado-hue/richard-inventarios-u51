@@ -884,7 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 download_excel:  /excel|xls/.test(qNorm),
                 show_table:      /muestr|mostr|list|tabla|ven|visualiz|enseñ/.test(qNorm),
                 classify:        /clasific|agrup|organiz|orden|diferenci|tipos?\s+de|cuales?\s+(son|tipo)|distint/.test(qNorm),
-                analyze:         /analiz|compar|cuentalos|cuenta|promedio|cuant|estadistic|resumen/.test(qNorm),
+                analyze:         /analiz|compar|cuentalos|promedio|estadistic|resumen/.test(qNorm),
                 affirm:          /^(si|sí|claro|dale|por supuesto|ok|hazlo|genera|porfa|por favor|yes|adelante|positivo)/.test(qNorm),
                 greet:           /^(hola|buenas|saludos|hey|buenos)/.test(qNorm),
             };
