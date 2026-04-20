@@ -986,27 +986,45 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // ─── KEYWORD EXTRACTION ───────────────────────────────────────────
+            // PRE-PROCESSING: Strip common question prefixes to get the pure subject
+            // e.g. "dame los tipos de tramo" → "tramo", "cuáles son los cascos" → "cascos"
+            let cleanQuery = qNorm
+                .replace(/^(dame|digame|dime|muestra|enseña|listame|necesito saber|quiero saber|quiero ver|quiero que me|que me digas|me puedes decir)\s+(los?|las?|un|una|el|la)?\s*/i, '')
+                .replace(/\b(tipos?\s+de|clases?\s+de|tipos?\s+hay\s+de|que\s+tipos?\s+(hay|existen|tienen)?)\s*/gi, '')
+                .replace(/\b(cuantos?\s+(tipos?|clases?|hay)\s+(de|en|con)?)\s*/gi, '')
+                .replace(/\b(cuales?\s+son\s+(los?|las?)?)\s*/gi, '')
+                .replace(/\b(que\s+(tipo|clase|modelo|marca)\s+(de|tienen)?)\s*/gi, '')
+                .trim();
+
             const stopWordsNorm = new Set([
                 // conversational filler
-                'hola','saludo','si','no','clar','ok','gracia','porfa','favor','please',
-                // question words
-                'cuant','cuanta','cuanto','cuantos','donde','hay','que','como','cual','quien','cuando','porque',
+                'hola','saludo','si','no','clar','ok','gracia','porfa','favor','please','bueno','bien',
+                // question/modifier words — CRITICAL: these describe HOW to ask, not WHAT to search
+                'cuant','cuanta','cuanto','cuantos','cuantas','donde','hay','que','como','cual','cuales',
+                'quien','cuando','porque','cuales','existe','existen','tienen','tienes',
+                // TYPE/CLASS modifiers — these signal INTENT, not ITEM NAMES
+                'tipo','tipos','tip','clase','clases','clas','modelo','modelos','categoria','categorias',
+                'variedad','variedades','version','versiones','marca','marcas','subtipo','subtipos',
                 // articles / prepositions
-                'de','el','la','lo','le','los','las','un','una','al','del','en','por','para','con','sin','a','y','o','ni','pero',
-                // action verbs (intent handled above)
+                'de','el','la','lo','le','los','las','un','una','al','del','en','por','para','con','sin',
+                'a','y','o','ni','pero','entre','sobre','bajo','hasta','desde','hacia','segun',
+                // action verbs and commands (intent handled separately)
                 'clasific','clasifica','clasifical','agrup','agrupa','grupalo','organiz','analiz','compar',
                 'diferenci','diferencia','mostr','muestr','mostram','muestra','lista','listar','ver','verl',
                 'descarg','descarga','descargal','descargalo','descargala','genera','imprim','hazlo',
-                'dame','dim','pon','quier','quiero','necesit','busco','buscam',
-                'enseñ','visualiz','export','export',
+                'dame','dim','pon','quier','quiero','necesit','busco','buscam','busca',
+                'enseñ','visualiz','export','filtr','filtram','separa',
                 // misc fillers
-                'total','cantidad','tip','son','e','me','mi','tu','su',
-                'este','esta','tengo','tien','tiene','ali','aqui','alla','nada','todo','toda','sol',
-                'favor','porfavor','dime','deme','digame','tenemos','tienen','cuales','cuales'
+                'total','cantidad','son','e','me','mi','tu','su','se','te','nos',
+                'este','esta','estos','estas','ese','esa','aquel','aquella',
+                'tengo','tien','tiene','tenemos','tienen','ali','aqui','alla','aca',
+                'nada','todo','toda','todos','todas','sol','algo','alguno','alguna',
+                'favor','porfavor','deme','digame','cuales','puedes','puede','podrias',
+                'hay','haber','habia','seran','son','hay'
             ]);
 
-            // Allow single digits (e.g. '2') and fractions (e.g. '1/2') through
-            const rawWords = qNorm.split(/[\s¿?.,!;:"]+/).filter(w => w.length >= 2 || /^\d+$/.test(w));
+            // Use pre-processed query for keyword extraction, original for intent context
+            const rawWords = cleanQuery.split(/[\s¿?.,!;:"]+/).filter(w => w.length >= 2 || /^\d+$/.test(w));
             const baseKeywords = rawWords.map(norm).filter(w => w.length >= 1 && !stopWordsNorm.has(w));
 
             // Expand with synonyms for richer matching
@@ -1017,6 +1035,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 expanded.forEach(e => { if (!keywords.includes(e)) keywords.push(e); });
                 expandedSets.push(expanded);
             });
+
 
             console.log("Intent:", JSON.stringify(INTENTS), "| BaseKw:", baseKeywords, "| Expanded:", keywords);
 
