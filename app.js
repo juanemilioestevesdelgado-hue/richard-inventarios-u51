@@ -875,7 +875,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
+            const stopWords = new Set(['tipo','tipos','clase','clases','cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
             // Action detection
