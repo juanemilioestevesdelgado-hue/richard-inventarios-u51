@@ -867,7 +867,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            // 1. ADVANCED NORMALIZATION (Plural to Singular)
+            // ─── NORMALIZATION ───────────────────────────────────────────────
             function norm(str) {
                 let s = (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 if (s.endsWith("es") && s.length > 4) s = s.slice(0, -2);
@@ -875,34 +875,61 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['si','sí','no','claro','ok','gracias','hola','saludos','tipo','tipos','clase','clases','cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta','clasifica','clasificalos','agrupa','agrupalos','cuales','diferencia','diferencias']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-            // Action detection
-            const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
-            let isPDF        = /\bpdf\b|\breporte\b/.test(qNorm);
-            const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
-            
-            // SUPER INTELLIGENCE: Contextual Affirmative Trigger
-            const isAffirmative = /^(si|claro|por supuesto|dale|ok|hazlo|genera|porfa|por favor|yes)/.test(qNorm);
-            const askedForReport = chatHistory.length > 0 && chatHistory[chatHistory.length - 1].content.includes("reporte completo");
-            if (isAffirmative && askedForReport) {
-                isPDF = true;
+            // ─── INTENT DETECTION (FIRST PRIORITY — before any keyword work) ──
+            // These patterns capture what the user WANTS TO DO, not what to search.
+            const INTENTS = {
+                download_pdf:    /descarg|pdf|reporte|imprim/.test(qNorm),
+                download_excel:  /excel|xls/.test(qNorm),
+                show_table:      /muestr|mostr|list|tabla|ven|visualiz|enseñ/.test(qNorm),
+                classify:        /clasific|agrup|organiz|orden|diferenci|tipos?\s+de|cuales?\s+(son|tipo)|distint/.test(qNorm),
+                analyze:         /analiz|compar|cuentalos|cuenta|promedio|cuant|estadistic|resumen/.test(qNorm),
+                affirm:          /^(si|sí|claro|dale|por supuesto|ok|hazlo|genera|porfa|por favor|yes|adelante|positivo)/.test(qNorm),
+                greet:           /^(hola|buenas|saludos|hey|buenos)/.test(qNorm),
+            };
+
+            // Affirmative after asking for report → trigger PDF
+            if (INTENTS.affirm) {
+                const lastAssistantMsg = [...chatHistory].reverse().find(m => m.role === 'assistant');
+                if (lastAssistantMsg && lastAssistantMsg.content.includes("reporte")) {
+                    INTENTS.download_pdf = true;
+                }
             }
 
-            // Extract Keywords
-            const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length >= 1);
-            const keywords = words.map(norm).filter(w => w.length > 0 && !stopWords.has(w));
+            // ─── KEYWORD EXTRACTION (only meaningful inventory terms) ────────
+            // These stop-words are stored as NORMALIZED (post-norm()) strings so the stripping bug is fixed.
+            const stopWordsNorm = new Set([
+                // conversational
+                'hola','saludo','si','no','clar','ok','gracia',
+                // question/quantity words
+                'cuant','cuanta','cuanto','donde','hay','que','como','cual','quien',
+                // articles/prepositions
+                'de','el','la','lo','le','los','las','un','una','al','del','en','por','para','con','sin','a',
+                // action verbs (intent handled above)
+                'clasific','clasifica','clasifical','agrup','agrupa','grupalo','organiz','analiz','compar',
+                'diferenci','diferencia','mostr','muestr','mostram','muestra','lista','listar','ver','verl',
+                'descarg','descarga','descargal','descargalo','descargala','genera','imprim','hazlo',
+                'dame','dim','pon','quier','quiero',
+                // misc
+                'total','cantidad','tipo','tipos','tip','clas','clase','son','e','me','mi','tu','su',
+                'este','esta','tengo','tien','tiene','hay','ali','aqui','alla','nada','todo','toda','sol'
+            ]);
 
-            console.log("Keywords extracted:", keywords);
+            const rawWords = qNorm.split(/[\s¿?.,!;:"]+/).filter(w => w.length >= 2);
+            const keywords = rawWords.map(norm).filter(w => w.length > 1 && !stopWordsNorm.has(w));
 
-            // 2. SEARCH (Local Data Extraction)
+            console.log("Intent:", JSON.stringify(INTENTS), "| Keywords:", keywords);
+
+            // ─── SEARCH (only if we have real inventory keywords) ────────────
             let matchedItems = [];
-            if (keywords.length > 0) {
+            const isAnalyticalQuery = INTENTS.classify || INTENTS.analyze;
+
+            if (keywords.length > 0 && !isAnalyticalQuery) {
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
-                    const cod = norm(item.codigo);
-                    const loc = norm(item.ubicacion);
+                    const cod  = norm(item.codigo);
+                    const loc  = norm(item.ubicacion);
                     return keywords.every(kw => desc.includes(kw) || cod.includes(kw) || loc.includes(kw));
                 });
                 if (matchedItems.length > 0) {
@@ -911,58 +938,63 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
-            // Context follow-up for "where", "how many", "status", "classify", etc.
-            const isFollowUp = /donde|estan|cuanto|cuanta|cantidad|estado|como estan|quien|ubicacion|donde se encuentran|que tal|clasifica|diferencia|agrupa|cuales/.test(qNorm);
-            const isActionOnly = (isShowAction || isPDF || isExcel || isAffirmative);
-            
-            // MÁXIMA INTELIGENCIA: Context Retention Engine
-            // Si la búsqueda actual no dio resultados, pero el usuario sigue mencionando el tema anterior o hace una pregunta analítica, MANTENEMOS EL CONTEXTO.
-            if (lastMatchedItems.length > 0 && matchedItems.length === 0) {
-                const queryContainsOldKeyword = lastKeywords.some(kw => qNorm.includes(kw));
-                if (queryContainsOldKeyword || isFollowUp || isActionOnly || query.length < 15) {
+            // ─── CONTEXT RETENTION ENGINE ─────────────────────────────────────
+            // If no new results, check if the user is still talking about the previous topic.
+            const needsContext = matchedItems.length === 0 && lastMatchedItems.length > 0;
+            if (needsContext) {
+                const queryMentionsPrevTopic = lastKeywords.some(kw => qNorm.includes(kw));
+                const isFollowUp = INTENTS.classify || INTENTS.analyze || INTENTS.download_pdf ||
+                    INTENTS.download_excel || INTENTS.show_table || INTENTS.affirm ||
+                    queryMentionsPrevTopic || query.trim().length < 12;
+                if (isFollowUp) {
                     matchedItems = lastMatchedItems;
-                    console.log("Super-Inteligencia: Contexto anterior recuperado exitosamente.");
+                    console.log("Context Retention: using previous results.");
                 }
             }
 
-            // 3. PRE-PROCESS FACTS (Deterministic Intelligence)
-            const kwStr = (keywords.length > 0 ? keywords : lastKeywords).join(' ');
-            const filterTerm = (keywords.length > 0 ? keywords[0] : lastKeywords[0]);
+            // ─── FACTS GENERATION (structured data for the AI) ───────────────
+            const kwStr     = (keywords.length > 0 && !isAnalyticalQuery) ? keywords.join(' ') : lastKeywords.join(' ');
+            const filterTerm = kwStr.split(' ')[0] || '';
             let factsText = "";
             if (matchedItems.length > 0) {
-                const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
+                const locs   = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin ubicación'))];
                 const buenos = matchedItems.filter(i => (i.estado || '').toLowerCase().includes('bueno')).length;
-                factsText = `Contexto: Encontré ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos, ${matchedItems.length - buenos} otros.`;
-                
-                // SUPER INTELLIGENCE: Feed exact details if the list is manageable
-                if (matchedItems.length <= 15) {
-                    const detalles = matchedItems.map(i => `[${i.codigo||'N/A'}] ${i.descripcion} (Marca: ${i.marca||'N/A'}, Est: ${i.estado||'N/A'}, Ubic: ${i.ubicacion||'N/A'})`).join(' | ');
-                    factsText += ` DETALLES EXACTOS: ${detalles}`;
+                factsText = `Hay ${matchedItems.length} ítems de "${kwStr}". Ubicaciones: ${locs.join(', ')}. Condición: ${buenos} en buen estado, ${matchedItems.length - buenos} sin especificar.`;
+                if (matchedItems.length <= 20) {
+                    const detalles = matchedItems.map(i =>
+                        `• [${i.codigo}] ${i.descripcion} — Marca: ${i.marca || 'N/A'}, Estado: ${i.estado || 'N/A'}`
+                    ).join('\n');
+                    factsText += `\nDETALLES POR ÍTEM:\n${detalles}`;
                 }
             }
 
-            // 4. CONVERSATIONAL LAYER (Advanced Brain)
+            // ─── AI CONVERSATIONAL BRAIN ──────────────────────────────────────
             try {
-                const inventorySummary = `Total general: ${currentInventoryData.length} ítems. Unidad: ${currentUnit}. Inventariador activo: ${inventariador || 'Bombero'}.`;
-                const currentFacts = factsText || (lastMatchedItems.length > 0 ? `Contexto anterior: ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".` : "");
+                const inventorySummary = `Inventario ${currentUnit}: ${currentInventoryData.length} ítems totales. Inventariador: ${inventariador || 'Bombero'}.`;
+                const dataContext      = factsText || (lastMatchedItems.length > 0
+                    ? `Contexto previo: ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".`
+                    : "Sin contexto de búsqueda activo.");
+                const intentContext    = Object.entries(INTENTS).filter(([,v]) => v).map(([k]) => k).join(', ') || 'conversación general';
 
-                const systemPrompt = `Eres el "Cerebro Logístico U-51", la IA más inteligente y avanzada de gestión de inventario para Bomberos.
-                RESUMEN GLOBAL: ${inventorySummary}
-                DATOS ENCONTRADOS PARA ESTA CONSULTA: ${currentFacts}
-                
-                REGLAS DE ORO:
-                1. Eres un experto analítico. Si hay "DETALLES EXACTOS" en los datos, úsalos para dar respuestas súper precisas (ej. mencionando marcas, códigos o ubicaciones específicas si preguntan).
-                2. Si el usuario pide descargar un PDF o Excel, o "mostrar", asume que el sistema ya lo hizo automáticamente por ti. Confírmalo con autoridad (ej. "He generado el documento inmediatamente").
-                3. NUNCA digas que no tienes información si los DATOS ENCONTRADOS tienen texto. Léele los datos al usuario de forma natural.
-                4. Tu tono debe ser el de una IA de alta tecnología: sumamente eficiente, profesional, deductivo y proactivo.
-                5. Usa emojis estratégicos pero sin exagerar (🚒, ⚙️, 📊, 🚨).
-                6. Ve al grano, pero da respuestas ricas en información técnica.`;
+                const systemPrompt = `Eres "Cerebro Logístico U-51", una IA avanzada de inventario para Bomberos.
+INVENTARIO: ${inventorySummary}
+DATOS ACTUALES: ${dataContext}
+INTENCIÓN DETECTADA DEL USUARIO: ${intentContext}
+
+INSTRUCCIONES ABSOLUTAS:
+1. INTENCIÓN "classify" o "analyze": Lee los DETALLES POR ÍTEM y haz un análisis real. Agrupa por marca, modelo o característica. Sé específico y detallado.
+2. INTENCIÓN "download_pdf" o "download_excel": El sistema ya generó el archivo automáticamente. Confírmalo con profesionalismo.
+3. INTENCIÓN "show_table": El sistema ya filtró la tabla. Confirma y describe lo que se muestra.
+4. NUNCA muestres los DETALLES en formato crudo. Conviértelos en análisis legible y natural.
+5. Si hay datos, ÚSALOS. Jamás digas "no tengo información" si los DATOS ACTUALES tienen contenido.
+6. Tono: IA avanzada — precisa, eficiente, proactiva. Emojis escasos pero certeros (🚒⚙️📊).
+7. Responde en español. Máximo 5 líneas a menos que el análisis requiera más.`;
 
                 chatHistory.push({ role: 'user', content: query });
                 if (chatHistory.length > 20) chatHistory.shift();
 
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 12000);
+                const timeoutId  = setTimeout(() => controller.abort(), 15000);
 
                 const response = await fetch('https://text.pollinations.ai/', {
                     method: 'POST',
@@ -980,28 +1012,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                 clearTimeout(timeoutId);
                 if (!response.ok) throw new Error("API Error");
 
-                let rawText = await response.text();
+                let rawText   = await response.text();
                 let cleanText = rawText.replace(/⚠️[\s\S]*?normally\./gi, '').trim();
 
-                // Fallback inteligente
-                if (factsText && (!cleanText || cleanText.length < 5 || cleanText.includes("no tengo información"))) {
-                    cleanText = `He analizado los registros y aquí tienes los detalles: ${factsText} ¿Deseas que genere un reporte completo? 🚒`;
+                // Only use fallback if AI truly returned nothing useful
+                if (!cleanText || cleanText.length < 5) {
+                    cleanText = factsText
+                        ? `⚙️ Sistema de lenguaje temporalmente saturado. Datos recuperados localmente:\n${factsText}`
+                        : "🚒 No encontré información sobre eso. Prueba con otro término de búsqueda.";
                 }
 
                 typingDiv.remove();
                 chatHistory.push({ role: 'assistant', content: cleanText });
 
-                // --- PROACTIVE ACTIONS ---
+                // Proactive actions (execute automatically)
                 if (matchedItems.length > 0) {
-                    if (isPDF) await downloadFilteredPDF(matchedItems, kwStr || 'consulta');
-                    if (isExcel) downloadFilteredExcel(matchedItems, kwStr || 'consulta');
-                    if (isShowAction) filterTableWith(filterTerm);
+                    if (INTENTS.download_pdf) await downloadFilteredPDF(matchedItems, kwStr || 'inventario');
+                    if (INTENTS.download_excel) downloadFilteredExcel(matchedItems, kwStr || 'inventario');
+                    if (INTENTS.show_table) filterTableWith(filterTerm);
                 }
 
-                let actions = matchedItems.length > 0 ? [
+                const actions = matchedItems.length > 0 ? [
                     { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
-                    { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
-                    { label: '📊 Excel', handler: () => downloadFilteredExcel(matchedItems, kwStr) }
+                    { label: '📄 PDF',          handler: () => downloadFilteredPDF(matchedItems, kwStr) },
+                    { label: '📊 Excel',         handler: () => downloadFilteredExcel(matchedItems, kwStr) }
                 ] : [
                     { label: '🔄 Ver Todo', handler: () => filterTableWith('') }
                 ];
@@ -1011,8 +1045,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error("AI Error:", err);
                 typingDiv.remove();
-                const emergencyMsg = factsText ? `🚨 Sistema de lenguaje con latencia, pero datos recuperados: ${factsText}` : "🚒 Perdona, mi núcleo de procesamiento está ocupado. Intenta con una búsqueda directa.";
-                addMessage(emergencyMsg, 'assistant');
+                const msg = factsText
+                    ? `🚨 Núcleo de lenguaje con latencia. Datos recuperados: ${factsText}`
+                    : "🚒 Error de conexión. Intenta con una búsqueda directa.";
+                addMessage(msg, 'assistant');
             }
         }
 
