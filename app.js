@@ -875,13 +875,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return s;
             }
 
-            const stopWords = new Set(['tipo', 'tipos', 'clase', 'clases', 'cuanto', 'cuantos', 'donde', 'hay', 'de', 'el', 'la', 'los', 'las', 'un', 'una', 'que', 'en', 'son', 'es', 'me', 'mi', 'tu', 'su', 'como', 'cual', 'tengo', 'tiene', 'total', 'cantidad', 'muestramelo', 'muestrame', 'mostrar', 'muestra', 'descarga', 'descargar', 'descargalo', 'descargala', 'pdf', 'excel', 'quiero', 'ver', 'lista', 'listar', 'dame', 'dime', 'solo', 'nada', 'todos', 'todas', 'del', 'al', 'por', 'para', 'con', 'sin', 'hya', 'hay', 'aqui', 'alla', 'este', 'esta']);
+            const stopWords = new Set(['si','sí','no','claro','ok','gracias','hola','saludos','tipo','tipos','clase','clases','cuanto','cuantos','donde','hay','de','el','la','los','las','un','una','que','en','son','es','me','mi','tu','su','como','cual','tengo','tiene','total','cantidad','muestramelo','muestrame','mostrar','muestra','descarga','descargar','descargalo','descargala','pdf','excel','quiero','ver','lista','listar','dame','dime','solo','nada','todos','todas','del','al','por','para','con','sin','hya','hay','aqui','alla','este','esta']);
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
             // Action detection
             const isShowAction = /muestram|mostram|listam|visualiz|filtr|ponm|verl|quiero ver|tabla|enseñam/.test(qNorm);
-            const isPDF = /\bpdf\b/.test(qNorm);
-            const isExcel = /\bexcel\b|\bxls\b/.test(qNorm);
+            let isPDF        = /\bpdf\b|\breporte\b/.test(qNorm);
+            const isExcel      = /\bexcel\b|\bxls\b/.test(qNorm);
+            
+            // SUPER INTELLIGENCE: Contextual Affirmative Trigger
+            const isAffirmative = /^(si|claro|por supuesto|dale|ok|hazlo|genera|porfa|por favor|yes)/.test(qNorm);
+            const askedForReport = chatHistory.length > 0 && chatHistory[chatHistory.length - 1].content.includes("reporte completo");
+            if (isAffirmative && askedForReport) {
+                isPDF = true;
+            }
 
             // Extract Keywords
             const words = qNorm.split(/[\s¿?.,!]+/).filter(w => w.length >= 1);
@@ -906,8 +913,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Context follow-up for "where", "how many", "status", etc.
             const isFollowUp = /donde|estan|cuanto|cuanta|cantidad|estado|como estan|quien|ubicacion|donde se encuentran|que tal/.test(qNorm);
-            const isActionOnly = (isShowAction || isPDF || isExcel);
-
+            const isActionOnly = (isShowAction || isPDF || isExcel || isAffirmative);
+            
             // If it's a follow-up or action-only, and we have previous context, USE IT.
             if (lastMatchedItems.length > 0 && (matchedItems.length === 0 || isActionOnly)) {
                 if (isFollowUp || isActionOnly || query.length < 15) {
