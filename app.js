@@ -878,77 +878,103 @@ document.addEventListener('DOMContentLoaded', async () => {
             const qNorm = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
             // ─── FIREFIGHTER SYNONYM DICTIONARY ──────────────────────────────
-            // Maps what users SAY → what to SEARCH in the inventory
             const SYNONYMS = {
-                // Hose & water equipment
-                'tramo':        ['tramo'],
-                'manguera':     ['manguera','tramo'],
-                'piton':        ['piton'],
-                'lanza':        ['piton','lanza'],
-                'pitones':      ['piton'],
-                'nozzle':       ['piton'],
-                // Breathing
-                'scba':         ['equipo de respiracion','scba','msn','msa'],
-                'mascarilla':   ['mascarilla','mascara'],
-                'oxigeno':      ['oxigeno','respiracion'],
-                'cilindro':     ['cilindro','tanque'],
-                'tanque':       ['cilindro','tanque'],
-                // Rescue tools
-                'hacha':        ['hacha'],
-                'destral':      ['hacha','destral'],
-                'palanca':      ['palanca','barreta'],
-                'barreta':      ['barreta','palanca'],
-                'cizalla':      ['cizalla'],
-                'excarcelador': ['excarcelador','hidraulico'],
-                'hidraulico':   ['hidraulico'],
-                // Ladders
-                'escalera':     ['escalera'],
-                'escala':       ['escalera'],
-                // PPE
-                'casco':        ['casco'],
-                'guante':       ['guante'],
-                'bota':         ['bota'],
-                'chaqueton':    ['chaqueton','chaqueta'],
-                'pantalon':     ['pantalon'],
-                'capucha':      ['capucha'],
-                // Electrical/lights
-                'linterna':     ['linterna','lampara'],
-                'lampara':      ['lampara','linterna'],
-                'generador':    ['generador'],
-                'reflector':    ['reflector','lampara'],
-                // Vehicles/equipment
-                'motosierra':   ['motosierra','sierra'],
-                'motobomba':    ['motobomba','bomba'],
-                'extintor':     ['extintor','extinguidor'],
-                'extinguidor':  ['extintor','extinguidor'],
-                // Misc
-                'cuerda':       ['cuerda','linea de vida','soga'],
-                'soga':         ['soga','cuerda'],
-                'radio':        ['radio'],
-                'comunicacion': ['radio','comunicacion'],
-                'kit':          ['kit','bolsa','maletín'],
-                'botiquin':     ['botiquin','primeros auxilios'],
-                'camilla':      ['camilla'],
-                'driver':       ['driver','sirena'],
-                'sirena':       ['sirena','driver'],
+                // ── Hose / Water ──────────────────────────────────────────────
+                'tramo':['tramo'],'tramos':['tramo'],'manguera':['manguera','tramo'],
+                'mangueras':['manguera','tramo'],'linea':['linea','tramo','manguera'],
+                'lineas':['linea','tramo'],'hose':['tramo','manguera'],
+                // Nozzles
+                'piton':['piton'],'pitones':['piton'],'lanza':['piton','lanza'],
+                'boquilla':['piton','boquilla'],'nozzle':['piton'],
+                'pitón':['piton'],'pitónes':['piton'],
+                // Adapters / fittings
+                'reduccion':['reduccion','adaptador'],'adaptador':['adaptador','reduccion'],
+                'siames':['siames'],'bifurcacion':['bifurcacion','siames'],
+                'copl':['copl','acoplamiento'],'acoplamiento':['acoplamiento','copl'],
+                'llave':['llave'],'espanero':['espanero','llave'],
+                // ── Breathing / SCBA ─────────────────────────────────────────
+                'scba':['equipo de respiracion','scba','msa','msn','respiracion'],
+                'aire':['aire','equipo de respiracion','cilindro'],
+                'cilindro':['cilindro','tanque'],'cilindros':['cilindro','tanque'],
+                'tanque':['cilindro','tanque'],'tanques':['cilindro','tanque'],
+                'oxigeno':['oxigeno','aire','cilindro'],'mascarilla':['mascarilla','mascara'],
+                'mascara':['mascarilla','mascara'],'regulador':['regulador'],
+                'arnés':['arnes','arnés'],'arnes':['arnes'],
+                // ── Rescue Tools ─────────────────────────────────────────────
+                'hacha':['hacha'],'hachas':['hacha'],'destral':['hacha','destral'],
+                'palanca':['palanca','barreta'],'barreta':['barreta','palanca'],
+                'cizalla':['cizalla'],'cizallas':['cizalla'],
+                'excarcelador':['excarcelador','hidraulico'],'hidraulico':['hidraulico'],
+                'pinza':['pinza','cizalla'],'cortador':['cizalla','cortador'],
+                'separador':['separador','hidraulico'],'ram':['ram','hidraulico'],
+                'combi':['combi','hidraulico'],'herramienta':['herramienta','hidraulico'],
+                // ── Ladders ──────────────────────────────────────────────────
+                'escalera':['escalera'],'escaleras':['escalera'],'escala':['escalera'],
+                'escalas':['escalera'],'ladder':['escalera'],
+                // ── PPE / Personal ────────────────────────────────────────────
+                'casco':['casco'],'cascos':['casco'],'helmet':['casco'],
+                'guante':['guante'],'guantes':['guante'],'glove':['guante'],
+                'bota':['bota'],'botas':['bota'],'boot':['bota'],
+                'chaqueton':['chaqueton','chaqueta'],'chaqueta':['chaqueton','chaqueta'],
+                'abrigo':['chaqueton'],'pantalon':['pantalon'],'pantalones':['pantalon'],
+                'capucha':['capucha'],'pasamontaña':['capucha','pasamontana'],
+                'ropa':['chaqueton','pantalon'],'uniforme':['chaqueton','pantalon'],
+                'epp':['casco','guante','bota','chaqueton'],
+                // ── Electrical / Lights ───────────────────────────────────────
+                'linterna':['linterna','lampara'],'linternas':['linterna','lampara'],
+                'lampara':['lampara','linterna'],'luz':['linterna','lampara','reflector'],
+                'generador':['generador'],'generadores':['generador'],
+                'reflector':['reflector','lampara'],'reflectores':['reflector'],
+                'cable':['cable'],'extension':['cable','extension'],
+                // ── Vehicles / Motor ──────────────────────────────────────────
+                'motosierra':['motosierra','sierra'],'sierra':['motosierra','sierra'],
+                'motobomba':['motobomba','bomba'],'bomba':['motobomba','bomba'],
+                'motor':['motor','motosierra','motobomba'],
+                // ── Fire Extinguishers ────────────────────────────────────────
+                'extintor':['extintor','extinguidor'],'extintores':['extintor','extinguidor'],
+                'extinguidor':['extintor','extinguidor'],'extinguish':['extintor'],
+                'co2':['co2','extintor'],'pqs':['pqs','extintor'],
+                // ── Ropes / Heights ───────────────────────────────────────────
+                'cuerda':['cuerda','linea de vida','soga'],'cuerdas':['cuerda','soga'],
+                'soga':['soga','cuerda'],'sogas':['soga','cuerda'],
+                'vida':['linea de vida','cuerda'],'rappel':['cuerda','descensor'],
+                'descensor':['descensor','cuerda'],'ascensor':['ascensor'],
+                'mosqueton':['mosqueton'],'arnes_alt':['arnes'],
+                // ── Medical / EMS ─────────────────────────────────────────────
+                'botiquin':['botiquin','primeros auxilios','kit'],
+                'camilla':['camilla'],'camillas':['camilla'],
+                'oximetro':['oximetro'],'desfibrilador':['desfibrilador','dea'],
+                'dea':['dea','desfibrilador'],'collar':['collar','inmovilizador'],
+                'inmovilizador':['inmovilizador','collar'],
+                // ── Communication ─────────────────────────────────────────────
+                'radio':['radio'],'radios':['radio'],
+                'comunicacion':['radio','comunicacion'],'handie':['radio'],
+                'walkie':['radio'],'driver':['driver','sirena'],
+                'sirena':['sirena','driver'],'bocina':['sirena','bocina'],
+                // ── Misc ─────────────────────────────────────────────────────
+                'kit':['kit','bolsa','maletin'],'bolsa':['bolsa','kit'],
+                'maletin':['maletin','kit'],'cono':['cono'],
+                'triangulo':['triangulo','cono'],'señal':['señal','cono','triangulo'],
+                'chaleco':['chaleco'],'chalecos':['chaleco'],
+                'careta':['careta','mascara','escudo'],'escudo':['escudo','careta'],
+                'visor':['visor','careta'],'foco':['linterna','foco'],
+                'pico':['pico'],'pala':['pala'],'azadon':['azadon','pala','pico'],
+                'soplete':['soplete'],'plasma':['plasma','cortador'],
             };
 
-            // Apply synonyms: expand keywords with alternative search terms
-            function expandWithSynonyms(word) {
-                return SYNONYMS[word] || [word];
-            }
+            function expandWithSynonyms(word) { return SYNONYMS[word] || [word]; }
 
-            // ─── INTENT DETECTION (FIRST PRIORITY — before any keyword work) ──
+            // ─── INTENT DETECTION ────────────────────────────────────────────
             const INTENTS = {
-                download_pdf:   /\bpdf\b|descarg.*pdf|reporte|imprim|export.*pdf/.test(qNorm),
-                download_excel: /\bexcel\b|\bxls\b|descarg.*excel|export.*excel/.test(qNorm),
-                show_table:     /\b(muestr|mostr|enseñ|tabla|ver\s+lista|ver\s+todo|visualiz)/.test(qNorm),
-                classify:       /clasific|subcategor|subgenero|subtipo|agrup|organiz|tipos?\s+de|cuales?\s+(son|tipo|hay)|diferent|distint|variedad|variant|separa|desglos/.test(qNorm),
-                analyze:        /analiz|compar|cuentalos|estadistic|resumen|informe|promedio/.test(qNorm),
-                affirm:         /^(si[^\w]|sí|claro|dale|por supuesto|ok|hazlo|genera|si$|adelante|positivo|correcto|exacto|afirmativo|bueno)/.test(qNorm),
-                greet:          /^(hola|buenas|saludos|hey|buenos|hi\b)/.test(qNorm),
-                status:         /\b(estado|condicion|funciona|malo|bueno|daña|roto|bien|operativ)/.test(qNorm),
-                location:       /\b(donde|ubicacion|estan|se encuentra|lugar|sitio|sector)/.test(qNorm),
+                download_pdf:   /\bpdf\b|descarg.*pdf|reporte|imprim|export.*pdf|genera.*pdf|baja.*pdf/.test(qNorm),
+                download_excel: /\bexcel\b|\bxls\b|descarg.*excel|export.*excel|genera.*excel/.test(qNorm),
+                show_table:     /\b(muestr|mostr|enseñ|tabla|ver\s+list|ver\s+todo|visualiz|ponm|filtrar|filtr)\b/.test(qNorm),
+                classify:       /clasific|subcategor|subgenero|subtipo|tipo\s+de|tipos\s+de|tipos?\s+hay|cuales?\s+(son|tipo|hay|exist)|agrup|organiz|diferent|distint|variedad|variant|separa|desglos|listado\s+de|que\s+tipos|cuantos\s+tipos/.test(qNorm),
+                analyze:        /analiz|compar|estadistic|resumen|informe|promedio|balance|resum|totale|cuadro/.test(qNorm),
+                affirm:         /^(si[\s,!]|sí|claro|dale|por supuesto|ok|hazlo|adelante|positivo|correcto|exacto|afirmativo|bueno|listo|genera|procede)/.test(qNorm) || qNorm.trim() === 'si' || qNorm.trim() === 'sí',
+                greet:          /^(hola|buenas|saludos|hey|buenos|hi\b|buen dia|buen tarde|buenas noches)/.test(qNorm),
+                status:         /\b(estado|condicion|funciona|malo|bueno|daña|roto|bien|operativ|disponible|sirve|funcional)\b/.test(qNorm),
+                location:       /\b(donde|ubicacion|estan|se encuentra|lugar|sitio|sector|guardado|almacena)\b/.test(qNorm),
             };
 
             // Affirmative after asking for report → trigger PDF
@@ -1004,9 +1030,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             let matchedItems = [];
-            const isAnalyticalQuery = INTENTS.classify || INTENTS.analyze;
 
-            if (baseKeywords.length > 0 && !isAnalyticalQuery) {
+            // NOTE: Analytical queries (classify/analyze) ALSO search — they search first, then analyze results.
+            if (baseKeywords.length > 0) {
                 // Strategy 1: AND across all expanded keyword groups (most precise)
                 matchedItems = currentInventoryData.filter(item => {
                     const desc = norm(item.descripcion);
@@ -1051,7 +1077,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // ─── FACTS GENERATION ─────────────────────────────────────────────
-            const kwStr      = (baseKeywords.length > 0 && !isAnalyticalQuery) ? baseKeywords.join(' ') : lastKeywords.join(' ');
+            const isAnalyticalQuery = INTENTS.classify || INTENTS.analyze;
+            const kwStr      = baseKeywords.length > 0 ? baseKeywords.join(' ') : lastKeywords.join(' ');
             const filterTerm = kwStr.split(' ')[0] || '';
             let factsText = "";
             if (matchedItems.length > 0) {
