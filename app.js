@@ -905,9 +905,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
 
-            // Context follow-up
-            const isActionOnly = (isShowAction || isPDF || isExcel) && keywords.length === 0;
-            if (isActionOnly && lastMatchedItems.length > 0) {
+            // Context follow-up for "where", "how many", "status", etc.
+            const isFollowUp = /donde|estan|cuanto|cuanta|cantidad|estado|como estan|quien/.test(qNorm);
+            const isActionOnly = (isShowAction || isPDF || isExcel);
+            
+            if ((isFollowUp || isActionOnly) && keywords.length === 0 && lastMatchedItems.length > 0) {
                 matchedItems = lastMatchedItems;
             }
 
@@ -918,18 +920,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (matchedItems.length > 0) {
                 const locs = [...new Set(matchedItems.map(i => i.ubicacion || 'Sin especificar'))];
                 const buenos = matchedItems.filter(i => (i.estado||'').toLowerCase().includes('bueno')).length;
-                factsText = `He encontrado ${matchedItems.length} ítems de "${kwStr}". Están en: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
+                factsText = `Contexto actual (${kwStr}): Encontré ${matchedItems.length} ítems. Ubicaciones: ${locs.join(', ')}. Estado: ${buenos} buenos.`;
             }
 
             // 4. CONVERSATIONAL LAYER
             try {
                 const inventorySummary = `Total ítems: ${currentInventoryData.length}. Unidad: ${currentUnit}. Inventariador: ${inventariador || 'Bombero'}.`;
                 
+                // Add context facts to prompt even if no new items found this turn
+                const contextFacts = factsText || (lastMatchedItems.length > 0 ? `Anteriormente hablamos de ${lastMatchedItems.length} ítems de "${lastKeywords.join(' ')}".` : "");
+
                 const systemPrompt = `Eres el Asistente Inteligente de la Estación U-51. 
-                RESUMEN: ${inventorySummary}. ${factsText ? "FACTS: " + factsText : "No encontré items específicos."}
+                RESUMEN: ${inventorySummary}. 
+                CONTEXTO DE DATOS: ${contextFacts}
                 REGLAS:
-                - Responde de forma muy profesional y amable.
-                - Si hay FACTS, úsalos para responder.
+                - Responde de forma profesional y usa los datos del CONTEXTO DE DATOS para responder preguntas de seguimiento (ej: "donde estan", "cuantos hay").
                 - Si el usuario te saluda, dile "¡Hola ${inventariador}!".
                 - Usa emojis bomberiles. 🚒
                 - NUNCA menciones APIs ni errores.
