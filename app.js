@@ -938,13 +938,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+                chatHistory.push({ role: 'user', content: query });
+                if (chatHistory.length > 15) chatHistory.shift();
+
                 const response = await fetch('https://text.pollinations.ai/', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         messages: [
                             { role: 'system', content: systemPrompt },
-                            { role: 'user', content: query }
+                            ...chatHistory
                         ],
                         model: 'openai'
                     }),
@@ -966,6 +969,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 typingDiv.remove();
                 
+                // Save AI response to history for next turn
+                chatHistory.push({ role: 'assistant', content: cleanText });
+                
                 let actions = matchedItems.length > 0 ? [
                     { label: '📋 Ver en Tabla', handler: () => filterTableWith(filterTerm) },
                     { label: '📄 PDF', handler: () => downloadFilteredPDF(matchedItems, kwStr) },
@@ -979,7 +985,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (err) {
                 console.error("AI Error:", err);
                 typingDiv.remove();
-                addMessage(factsText || "🚒 Perdona, tengo problemas de conexión. ¿Puedes intentar de nuevo?", 'assistant');
+                const fallbackMsg = factsText || "🚒 Perdona, tengo problemas de conexión. ¿Puedes intentar de nuevo?";
+                addMessage(fallbackMsg, 'assistant');
             }
         }
 
