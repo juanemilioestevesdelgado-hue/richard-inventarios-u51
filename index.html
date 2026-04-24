@@ -35,10 +35,28 @@
         <div class="splash-content">
             <img src="logo.jpeg" alt="Logo" class="splash-logo">
             <h1>Bienvenido</h1>
-            <p style="font-weight: 600; margin-bottom: 10px;">¿Quién va a hacer inventario hoy?</p>
-            <input type="text" id="inventariador-name" placeholder="Escribe tu nombre..." style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; width: 80%; margin-bottom: 25px; font-size: 1rem; text-align: center;">
-            <p>Selecciona el inventario que deseas gestionar:</p>
-            <div class="unit-selection">
+            <p id="splash-instruction" style="font-weight: 600; margin-bottom: 10px;">Inicia sesión para continuar</p>
+            
+            <div id="auth-forms" style="width: 80%; margin: 0 auto 20px;">
+                <!-- Formulario de Login -->
+                <div id="login-form" style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="text" id="login-user" placeholder="Usuario" style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; text-align: center;">
+                    <input type="password" id="login-pass" placeholder="Contraseña" style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; text-align: center;">
+                    <button id="btn-login" style="padding: 12px; border-radius: 8px; border: none; background: #6366f1; color: white; font-weight: bold; cursor: pointer;">Entrar</button>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">¿No tienes cuenta? <a href="#" id="show-register" style="color: #6366f1;">Regístrate</a></p>
+                </div>
+
+                <!-- Formulario de Registro -->
+                <div id="register-form" style="display: none; flex-direction: column; gap: 10px;">
+                    <input type="text" id="reg-user" placeholder="Nuevo Usuario" style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; text-align: center;">
+                    <input type="password" id="reg-pass" placeholder="Contraseña" style="padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 1rem; text-align: center;">
+                    <button id="btn-register" style="padding: 12px; border-radius: 8px; border: none; background: #10b981; color: white; font-weight: bold; cursor: pointer;">Registrarse</button>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">¿Ya tienes cuenta? <a href="#" id="show-login" style="color: #6366f1;">Inicia Sesión</a></p>
+                </div>
+            </div>
+
+            <div class="unit-selection" style="display: none;">
+                <p>Selecciona el inventario que deseas gestionar:</p>
                 <button class="unit-btn" data-unit="CC51">
                     <span>Inventario CC51</span>
                     <i class="ph ph-arrow-right"></i>
@@ -82,6 +100,10 @@
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
                     <div style="display: flex; gap: 10px; align-items: center; justify-content: flex-end;">
+                        <button id="admin-btn" class="upload-btn hidden"
+                            style="height: fit-content; background: #8b5cf6; color: white; border: 2px solid #7c3aed; padding: 0.5rem 1.2rem; font-size: 0.9rem; font-weight: 700;">
+                            <i class="ph ph-shield-check"></i> Panel Comandante
+                        </button>
                         <button id="change-unit-btn" class="upload-btn"
                             style="height: fit-content; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: 2px solid #4f46e5; padding: 0.5rem 1.2rem; font-size: 0.9rem; font-weight: 700; box-shadow: 0 2px 8px rgba(99,102,241,0.3);">
                             <i class="ph ph-house-simple"></i> Menú Principal
@@ -149,7 +171,7 @@
                             <th class="action-column">Revisión</th>
                             <th>Próxima Rev.</th>
                             <th class="action-column">Comentarios</th>
-                            <th class="action-column" style="width: 60px;">Acciones</th>
+                            <th class="action-column" style="width: 90px; text-align:center;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="inventory-body">
@@ -158,6 +180,28 @@
                 </table>
             </div>
         </main>
+    </div>
+
+    <!-- Admin Modal -->
+    <div id="admin-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 600px; padding: 20px;">
+            <span class="close-admin-modal" style="float: right; cursor: pointer; font-size: 20px;"><i class="ph ph-x"></i></span>
+            <h2 style="margin-bottom: 15px; color: #7c3aed;"><i class="ph ph-shield-check"></i> Panel de Comandante</h2>
+            
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px; font-size: 1rem;">Registrar Usuario Directamente</h3>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="admin-reg-user" placeholder="Usuario" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="password" id="admin-reg-pass" placeholder="Contraseña" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                    <button id="admin-btn-register" class="upload-btn" style="background: #10b981; color: white;">Registrar</button>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom: 10px; font-size: 1rem;">Buzón de Entrada (Usuarios)</h3>
+            <div id="admin-users-list" style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+                <!-- Lista de usuarios poblada por JS -->
+            </div>
+        </div>
     </div>
 
     <!-- Image Modal -->

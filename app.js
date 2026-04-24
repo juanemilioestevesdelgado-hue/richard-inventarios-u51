@@ -5,11 +5,14 @@ import {
     getFirestore,
     collection,
     getDocs,
+    getDoc,
     onSnapshot,
     doc,
     setDoc,
     updateDoc,
-    writeBatch
+    writeBatch,
+    arrayUnion,
+    arrayRemove
 } from "firebase/firestore";
 
 const inventoryMap = {
@@ -65,11 +68,113 @@ document.addEventListener('DOMContentLoaded', async () => {
     const appContainer = document.querySelector('.app-container');
     const mainTitle = document.getElementById('main-title');
 
-    const inventariadorInput = document.getElementById('inventariador-name');
     let inventariador = localStorage.getItem('inventariador') || '';
-    if (inventariador) {
-        inventariadorInput.value = inventariador;
+    let currentUserRole = localStorage.getItem('userRole') || 'user';
+
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const btnLogin = document.getElementById('btn-login');
+    const btnRegister = document.getElementById('btn-register');
+    const showRegister = document.getElementById('show-register');
+    const showLogin = document.getElementById('show-login');
+    const adminBtn = document.getElementById('admin-btn');
+    const authFormsContainer = document.getElementById('auth-forms');
+    const unitSelectionContainer = document.querySelector('.unit-selection');
+    const splashInstruction = document.getElementById('splash-instruction');
+
+    // Toggle forms
+    showRegister.addEventListener('click', (e) => { e.preventDefault(); loginForm.style.display = 'none'; registerForm.style.display = 'flex'; splashInstruction.textContent = "Regístrate para continuar"; });
+    showLogin.addEventListener('click', (e) => { e.preventDefault(); registerForm.style.display = 'none'; loginForm.style.display = 'flex'; splashInstruction.textContent = "Inicia sesión para continuar"; });
+
+    function loginSuccess(user, role) {
+        inventariador = user;
+        currentUserRole = role;
+        localStorage.setItem('inventariador', user);
+        localStorage.setItem('userRole', role);
+        authFormsContainer.style.display = 'none';
+        unitSelectionContainer.style.display = 'flex';
+        splashInstruction.textContent = `Bienvenido, ${user}. Selecciona un inventario:`;
+        
+        if (role === 'admin') {
+            adminBtn.classList.remove('hidden');
+        } else {
+            adminBtn.classList.add('hidden');
+        }
     }
+
+    // Auto-login si ya hay sesión
+    if (inventariador) {
+        loginSuccess(inventariador, currentUserRole);
+    }
+
+    btnLogin.addEventListener('click', async () => {
+        const user = document.getElementById('login-user').value.trim();
+        const pass = document.getElementById('login-pass').value.trim();
+        if (!user || !pass) return alert("Completa los datos");
+
+        btnLogin.innerHTML = 'Cargando...';
+        btnLogin.disabled = true;
+
+        if (user === '17010' && pass === 'Adri135Emi135') {
+            loginSuccess(user, 'admin');
+            btnLogin.innerHTML = 'Entrar';
+            btnLogin.disabled = false;
+            return;
+        }
+
+        try {
+            const docSnap = await getDoc(doc(db, 'users', user));
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.password === pass) {
+                    if (data.approved) {
+                        loginSuccess(user, 'user');
+                    } else {
+                        alert('Tu cuenta está pendiente de aprobación por el Comandante.');
+                    }
+                } else {
+                    alert('Contraseña incorrecta.');
+                }
+            } else {
+                alert('Usuario no encontrado.');
+            }
+        } catch (error) {
+            console.error("Login error", error);
+            alert("Error al iniciar sesión");
+        }
+        btnLogin.innerHTML = 'Entrar';
+        btnLogin.disabled = false;
+    });
+
+    btnRegister.addEventListener('click', async () => {
+        const user = document.getElementById('reg-user').value.trim();
+        const pass = document.getElementById('reg-pass').value.trim();
+        if (!user || !pass) return alert("Completa los datos");
+        if (user === '17010') return alert("Nombre de usuario no disponible");
+
+        btnRegister.innerHTML = 'Cargando...';
+        btnRegister.disabled = true;
+
+        try {
+            const docSnap = await getDoc(doc(db, 'users', user));
+            if (docSnap.exists()) {
+                alert('El usuario ya existe');
+            } else {
+                await setDoc(doc(db, 'users', user), {
+                    password: pass,
+                    approved: false,
+                    createdAt: new Date().toISOString()
+                });
+                alert('Registro exitoso. Espera la aprobación del Comandante.');
+                showLogin.click();
+            }
+        } catch (error) {
+            console.error("Register error", error);
+            alert("Error al registrar");
+        }
+        btnRegister.innerHTML = 'Registrarse';
+        btnRegister.disabled = false;
+    });
 
     const initAppForUnit = (unit) => {
         currentUnit = unit;
@@ -86,16 +191,117 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     unitButtons.forEach(btn => {
         btn.addEventListener('click', () => {
-            const name = inventariadorInput.value.trim();
-            if (!name) {
-                alert('Por favor, ingresa tu nombre antes de continuar.');
+            if (!inventariador) {
+                alert('Por favor inicia sesión primero.');
                 return;
             }
-            inventariador = name;
-            localStorage.setItem('inventariador', name);
             initAppForUnit(btn.dataset.unit);
         });
     });
+
+    // Admin Panel Logic
+    const adminModal = document.getElementById('admin-modal');
+    const closeAdminModal = document.querySelector('.close-admin-modal');
+    const adminUsersList = document.getElementById('admin-users-list');
+    const adminBtnRegister = document.getElementById('admin-btn-register');
+
+    if (adminBtn && adminModal) {
+        adminBtn.addEventListener('click', () => {
+            adminModal.classList.remove('hidden');
+            loadAdminUsers();
+        });
+        closeAdminModal.addEventListener('click', () => adminModal.classList.add('hidden'));
+        adminModal.addEventListener('click', (e) => { if (e.target === adminModal) adminModal.classList.add('hidden'); });
+
+        adminBtnRegister.addEventListener('click', async () => {
+            const user = document.getElementById('admin-reg-user').value.trim();
+            const pass = document.getElementById('admin-reg-pass').value.trim();
+            if (!user || !pass) return alert('Completa los campos');
+            if (user === '17010') return alert('No puedes usar ese nombre');
+
+            adminBtnRegister.innerHTML = 'Cargando...';
+            try {
+                const docSnap = await getDoc(doc(db, 'users', user));
+                if (docSnap.exists()) {
+                    alert('El usuario ya existe');
+                } else {
+                    await setDoc(doc(db, 'users', user), {
+                        password: pass,
+                        approved: true, // Auto-approved by admin
+                        createdAt: new Date().toISOString()
+                    });
+                    alert('Usuario registrado y aprobado correctamente.');
+                    document.getElementById('admin-reg-user').value = '';
+                    document.getElementById('admin-reg-pass').value = '';
+                    loadAdminUsers();
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error registrando usuario');
+            }
+            adminBtnRegister.innerHTML = 'Registrar';
+        });
+
+        async function loadAdminUsers() {
+            adminUsersList.innerHTML = '<p>Cargando...</p>';
+            try {
+                const querySnapshot = await getDocs(collection(db, 'users'));
+                adminUsersList.innerHTML = '';
+                if (querySnapshot.empty) {
+                    adminUsersList.innerHTML = '<p>No hay usuarios registrados.</p>';
+                    return;
+                }
+                
+                querySnapshot.forEach((docSnap) => {
+                    const userData = docSnap.data();
+                    const username = docSnap.id;
+                    
+                    const div = document.createElement('div');
+                    div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #ccc;';
+                    
+                    const span = document.createElement('span');
+                    span.textContent = `${username} (Estado: ${userData.approved ? 'Aprobado' : 'Pendiente'})`;
+                    
+                    const btn = document.createElement('button');
+                    btn.className = 'upload-btn';
+                    
+                    if (userData.approved) {
+                        btn.style.background = '#ef4444';
+                        btn.style.color = 'white';
+                        btn.textContent = 'Quitar Acceso';
+                        btn.addEventListener('click', async () => {
+                            const pwd = prompt('Introduce tu contraseña de comandante para desmarcar:');
+                            if (pwd === 'Adri135Emi135') {
+                                await updateDoc(doc(db, 'users', username), { approved: false });
+                                alert('Acceso removido.');
+                                loadAdminUsers();
+                            } else if (pwd !== null) {
+                                alert('Contraseña incorrecta');
+                            }
+                        });
+                    } else {
+                        btn.style.background = '#10b981';
+                        btn.style.color = 'white';
+                        btn.textContent = 'Verificar';
+                        btn.addEventListener('click', async () => {
+                            if (confirm('¿Estás seguro que quieres marcar este usuario como registrado?')) {
+                                await updateDoc(doc(db, 'users', username), { approved: true });
+                                alert('Usuario aprobado.');
+                                loadAdminUsers();
+                            }
+                        });
+                    }
+                    
+                    div.appendChild(span);
+                    div.appendChild(btn);
+                    adminUsersList.appendChild(div);
+                });
+            } catch (error) {
+                console.error("Error loading users:", error);
+                adminUsersList.innerHTML = '<p>Error al cargar usuarios.</p>';
+            }
+        }
+    }
 
     // If unit is already selected, we could skip splash, but user wants it before entering.
     // However, if they just refreshed, maybe show it anyway.
@@ -184,6 +390,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderTable(filteredData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg);
     });
 
+    async function logHistory(itemId, changeDescription) {
+        if (!inventariador) return;
+        const date = new Date();
+        const logEntry = {
+            id: date.getTime().toString(),
+            user: inventariador,
+            date: date.toLocaleString(),
+            change: changeDescription
+        };
+        try {
+            await updateDoc(doc(db, currentCollection, itemId), {
+                historial: arrayUnion(logEntry)
+            });
+        } catch(e) {
+            console.error("Error logging history:", e);
+        }
+    }
+
     function renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg) {
         tableBody.innerHTML = '';
 
@@ -229,8 +453,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <td data-label="Comentarios" class="action-column">
                     <textarea class="comment-input" id="comment-${item.id}" rows="1" placeholder="Agregar comentario..." ${item.revisado ? 'disabled' : ''}>${item.comentarios || ''}</textarea>
                 </td>
-                <td data-label="Acciones" class="action-column" style="display:flex; gap:15px; align-items:center; justify-content:center; padding-top:10px;">
+                <td data-label="Acciones" class="action-column" style="display:flex; gap:10px; align-items:center; justify-content:center; padding-top:10px; flex-wrap:wrap;">
                     <button class="icon-btn edit-item-btn" id="edit-${item.id}" title="Editar Item" style="color: ${item.revisado ? '#9ca3af' : '#3b82f6'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-pencil-simple"></i></button>
+                    <button class="icon-btn history-item-btn" id="history-${item.id}" title="Ver Historial" style="color: #10b981; background: none; border: none; cursor: pointer; font-size: 22px;"><i class="ph ph-clock-counter-clockwise"></i></button>
                     <button class="icon-btn delete-item-btn" id="delete-item-${item.id}" title="Borrar Item" style="color: ${item.revisado ? '#9ca3af' : '#ef4444'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-trash"></i></button>
                 </td>
             `;
@@ -258,12 +483,62 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             tableBody.appendChild(photoTr);
 
+            const historyTr = document.createElement('tr');
+            historyTr.id = `history-row-${item.id}`;
+            historyTr.className = 'photo-row hidden';
+            
+            let historyHtml = '<p style="color: gray; font-size: 0.9rem;">No hay historial de cambios.</p>';
+            if (item.historial && item.historial.length > 0) {
+                const logs = [...item.historial].reverse().map(log => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px; border-bottom: 1px solid #eee;">
+                        <span><strong style="color:#6366f1;">${log.user}</strong> [${log.date}]: ${log.change}</span>
+                        ${currentUserRole === 'admin' ? `<button class="delete-history-btn" data-item="${item.id}" data-logid="${log.id}" style="background: none; border: none; color: #ef4444; cursor: pointer;"><i class="ph ph-trash"></i></button>` : ''}
+                    </div>
+                `).join('');
+                historyHtml = `<div style="max-height: 150px; overflow-y: auto;">${logs}</div>`;
+            }
+
+            historyTr.innerHTML = `
+                <td colspan="16" style="padding: 10px 20px; background: #f8fafc;">
+                    <h4 style="margin-bottom: 10px; color: #475569;"><i class="ph ph-clock-counter-clockwise"></i> Historial de Cambios</h4>
+                    ${historyHtml}
+                </td>
+            `;
+            tableBody.appendChild(historyTr);
+
             // Toggle photo row
             const toggleBtn = tr.querySelector(`#toggle-${item.id}`);
             toggleBtn.addEventListener('click', () => {
                 photoTr.classList.toggle('hidden');
                 toggleBtn.classList.toggle('expanded');
             });
+
+            // Toggle history row
+            const historyBtn = tr.querySelector(`#history-${item.id}`);
+            if (historyBtn) {
+                historyBtn.addEventListener('click', () => {
+                    historyTr.classList.toggle('hidden');
+                });
+            }
+
+            // Delete history log (admin only)
+            if (currentUserRole === 'admin') {
+                const delBtns = historyTr.querySelectorAll('.delete-history-btn');
+                delBtns.forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if(!confirm('¿Borrar este registro del historial?')) return;
+                        const logId = btn.getAttribute('data-logid');
+                        const logToRemove = item.historial.find(h => h.id === logId);
+                        if(logToRemove) {
+                            try {
+                                await updateDoc(doc(db, currentCollection, item.id), {
+                                    historial: arrayRemove(logToRemove)
+                                });
+                            } catch(e) { console.error(e); }
+                        }
+                    });
+                });
+            }
 
             // Checkbox (Revisión)
             const checkbox = tr.querySelector(`#check-${item.id}`);
@@ -288,6 +563,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 reviewedItemsEl.textContent = reviewedCount;
                 await updateDoc(doc(db, currentCollection, item.id), updateData);
+                logHistory(item.id, isChecked ? 'Marcado como revisado' : 'Desmarcado como revisado');
             });
 
             // Comment
@@ -299,6 +575,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 clearTimeout(timeoutId);
                 timeoutId = setTimeout(async () => {
                     await updateDoc(doc(db, currentCollection, item.id), { comentarios: e.target.value });
+                    logHistory(item.id, 'Comentario actualizado');
                 }, 1000);
             });
 
@@ -315,6 +592,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             statusSelect.addEventListener('change', async (e) => {
                 updateSelectColor(e.target.value);
                 await updateDoc(doc(db, currentCollection, item.id), { estado: e.target.value });
+                logHistory(item.id, `Estado cambiado a: ${e.target.value}`);
             });
 
             // Inline Proxima Revision
@@ -332,6 +610,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             nextRevInput.addEventListener('blur', async (e) => {
                 if (item.proximaRevision !== e.target.value) {
                     await updateDoc(doc(db, currentCollection, item.id), { proximaRevision: e.target.value });
+                    logHistory(item.id, `Próxima revisión cambiada a: ${e.target.value}`);
                 }
             });
 
@@ -396,6 +675,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         deletePhotoBtn.classList.add('hidden');
                         labelBtn.innerHTML = '<i class="ph ph-camera"></i> Subir Fotografía';
                         deletePhotoBtn.innerHTML = '<i class="ph ph-trash"></i> Borrar Foto';
+                        logHistory(item.id, 'Fotografía borrada');
                     } catch (error) {
                         console.error("Error deleting image:", error);
                         alert("Error al borrar la foto.");
@@ -420,6 +700,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         deletePhotoBtn.classList.remove('hidden');
                         await updateDoc(doc(db, currentCollection, item.id), { fotoUrl: imageUrl });
                         labelBtn.innerHTML = '<i class="ph ph-check"></i> Subida';
+                        logHistory(item.id, 'Fotografía subida');
                     } else {
                         throw new Error("ImgBB error");
                     }
@@ -533,7 +814,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 marca: document.getElementById('add-marca').value.trim(),
                 modelo: document.getElementById('add-modelo').value.trim(),
                 serie: document.getElementById('add-serie').value.trim(),
-                estado: "", revisado: false, comentarios: "", fotoUrl: ""
+                estado: "", revisado: false, comentarios: "", fotoUrl: "",
+                historial: [{
+                    id: Date.now().toString(),
+                    user: inventariador,
+                    date: new Date().toLocaleString(),
+                    change: 'Item añadido al inventario'
+                }]
             };
 
             try {
@@ -597,6 +884,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 await updateDoc(doc(db, currentCollection, originalCodigo), updatedItem);
+                logHistory(originalCodigo, 'Item editado manualmente desde el formulario');
                 alert('Item actualizado correctamente. La página se recargará.');
                 window.location.reload();
             } catch (error) {
@@ -1117,7 +1405,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (items.length === 0) {
                     if (intent.greet) {
                         const cats = [...new Set(currentInventoryData.map(i => (i.descripcion||'').split(' ')[0]))].slice(0,8).join(', ');
-                        return `¡Hola ${inventariador || 'Bombero'}! 👋 Soy el Cerebro Logístico U-51.\n\nPuedo ayudarte con:\n  🔍 Búsquedas: "cuántos pitones hay", "busca escaleras"\n  📊 Análisis: "clasifica los tramos", "analiza el inventario"\n  📄 Reportes: "descarga el PDF", "exportar Excel"\n  🗺️ Ubicaciones: "dónde están los cascos"\n\nEquipos disponibles en esta unidad: ${cats}... ¿Qué necesitas? 🚒`;
+                        return `¡Hola ${inventariador || 'Bombero'}! 👋 Soy Búsqueda inteligente mediante IA.\n\nPuedo ayudarte con:\n  🔍 Búsquedas: "cuántos pitones hay", "busca escaleras"\n  📊 Análisis: "clasifica los tramos", "analiza el inventario"\n  📄 Reportes: "descarga el PDF", "exportar Excel"\n  🗺️ Ubicaciones: "dónde están los cascos"\n\nEquipos disponibles en esta unidad: ${cats}... ¿Qué necesitas? 🚒`;
                     }
                     return null;
                 }
@@ -1214,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     : "Sin contexto de búsqueda activo.");
                 const intentContext    = Object.entries(INTENTS).filter(([,v]) => v).map(([k]) => k).join(', ') || 'conversación general';
 
-                const systemPrompt = `Eres "Cerebro Logístico U-51", una IA avanzada de inventario para Bomberos.
+                const systemPrompt = `Eres "Búsqueda inteligente mediante IA", una IA avanzada de inventario para Bomberos.
 INVENTARIO: ${inventorySummary}
 DATOS ACTUALES: ${dataContext}
 INTENCIÓN DEL USUARIO: ${intentContext}
