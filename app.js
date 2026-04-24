@@ -117,14 +117,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const syncBtn = document.getElementById('sync-btn');
         const clearDbBtn = document.getElementById('clear-db-btn');
 
+        if (addItemBtn) addItemBtn.classList.remove('hidden');
+
         if (role === 'admin') {
             adminBtn.classList.remove('hidden');
-            if(addItemBtn) addItemBtn.classList.remove('hidden');
             if(syncBtn) syncBtn.classList.remove('hidden');
             if(clearDbBtn) clearDbBtn.classList.remove('hidden');
         } else {
             adminBtn.classList.add('hidden');
-            if(addItemBtn) addItemBtn.classList.add('hidden');
             if(syncBtn) syncBtn.classList.add('hidden');
             if(clearDbBtn) clearDbBtn.classList.add('hidden');
         }
