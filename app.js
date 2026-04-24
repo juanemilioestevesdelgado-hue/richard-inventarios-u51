@@ -596,9 +596,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         return;
                     }
                 } else {
-                    const pwd = prompt('Introduce la contraseña del comandante para desmarcar:');
-                    if (pwd !== '2026**') {
-                        alert('Contraseña incorrecta');
+                    if (!confirm('¿Estás seguro que quieres deshabilitar el check de este ítem?')) {
                         e.target.checked = true;
                         return;
                     }
