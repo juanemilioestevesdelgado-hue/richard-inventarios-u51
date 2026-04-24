@@ -482,7 +482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <textarea class="comment-input" id="comment-${item.id}" rows="1" placeholder="Agregar comentario..." ${item.revisado ? 'disabled' : ''}>${item.comentarios || ''}</textarea>
                 </td>
                 <td data-label="Acciones" class="action-column" style="display:flex; gap:10px; align-items:center; justify-content:center; padding-top:10px; flex-wrap:wrap;">
-                    ${currentUserRole === 'admin' ? `<button class="icon-btn edit-item-btn" id="edit-${item.id}" title="Editar Item" style="color: ${item.revisado ? '#9ca3af' : '#3b82f6'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-pencil-simple"></i></button>` : ''}
+                    <button class="icon-btn edit-item-btn" id="edit-${item.id}" title="Editar Item" style="color: ${item.revisado ? '#9ca3af' : '#3b82f6'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-pencil-simple"></i></button>
                     <button class="icon-btn history-item-btn" id="history-${item.id}" title="Ver Historial" style="color: #10b981; background: none; border: none; cursor: pointer; font-size: 22px;"><i class="ph ph-clock-counter-clockwise"></i></button>
                     ${currentUserRole === 'admin' ? `<button class="icon-btn delete-item-btn" id="delete-item-${item.id}" title="Borrar Item" style="color: ${item.revisado ? '#9ca3af' : '#ef4444'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-trash"></i></button>` : ''}
                 </td>
@@ -660,7 +660,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const deleteItemBtn = tr.querySelector(`#delete-item-${item.id}`);
             if (deleteItemBtn) {
                 deleteItemBtn.addEventListener('click', async () => {
-                    if (!confirm(`¿Estás seguro de ELIMINAR el ítem ${item.codigo}? Esta acción no se puede deshacer.`)) return;
+                    if (!confirm(`¿Estás seguro de que quieres borrar el ítem ${item.codigo}? Esta acción no se puede deshacer.`)) return;
                     try {
                         const batch = writeBatch(db);
                         batch.delete(doc(db, currentCollection, item.id));
