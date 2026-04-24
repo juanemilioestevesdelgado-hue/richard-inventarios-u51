@@ -809,3 +809,9 @@ th {
         justify-content: center;
     }
 }
+
+.hidden { display: none !important; }
+
+
+button.hidden { display: none !important; }
+

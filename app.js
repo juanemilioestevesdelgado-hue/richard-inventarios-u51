@@ -88,14 +88,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     showLogin.addEventListener('click', (e) => { e.preventDefault(); registerForm.style.display = 'none'; loginForm.style.display = 'flex'; splashInstruction.textContent = "Inicia sesión para continuar"; });
 
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
-                localStorage.removeItem('inventariador');
-                localStorage.removeItem('userRole');
-                localStorage.removeItem('selectedUnit');
-                window.location.reload();
-            }
-        });
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+    const logoutBtnSplash = document.getElementById('logout-btn-splash');
+    if (logoutBtnSplash) {
+        logoutBtnSplash.addEventListener('click', handleLogout);
+    }
+
+    function handleLogout() {
+        if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
+            localStorage.removeItem('inventariador');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('selectedUnit');
+            window.location.reload();
+        }
     }
 
     function loginSuccess(user, role) {
@@ -107,10 +113,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         unitSelectionContainer.style.display = 'flex';
         splashInstruction.textContent = `Bienvenido, ${user}. Selecciona un inventario:`;
         
+        const addItemBtn = document.getElementById('add-item-btn');
+        const syncBtn = document.getElementById('sync-btn');
+        const clearDbBtn = document.getElementById('clear-db-btn');
+
         if (role === 'admin') {
             adminBtn.classList.remove('hidden');
+            if(addItemBtn) addItemBtn.classList.remove('hidden');
+            if(syncBtn) syncBtn.classList.remove('hidden');
+            if(clearDbBtn) clearDbBtn.classList.remove('hidden');
         } else {
             adminBtn.classList.add('hidden');
+            if(addItemBtn) addItemBtn.classList.add('hidden');
+            if(syncBtn) syncBtn.classList.add('hidden');
+            if(clearDbBtn) clearDbBtn.classList.add('hidden');
         }
     }
 
@@ -466,9 +482,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <textarea class="comment-input" id="comment-${item.id}" rows="1" placeholder="Agregar comentario..." ${item.revisado ? 'disabled' : ''}>${item.comentarios || ''}</textarea>
                 </td>
                 <td data-label="Acciones" class="action-column" style="display:flex; gap:10px; align-items:center; justify-content:center; padding-top:10px; flex-wrap:wrap;">
-                    <button class="icon-btn edit-item-btn" id="edit-${item.id}" title="Editar Item" style="color: ${item.revisado ? '#9ca3af' : '#3b82f6'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-pencil-simple"></i></button>
+                    ${currentUserRole === 'admin' ? `<button class="icon-btn edit-item-btn" id="edit-${item.id}" title="Editar Item" style="color: ${item.revisado ? '#9ca3af' : '#3b82f6'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-pencil-simple"></i></button>` : ''}
                     <button class="icon-btn history-item-btn" id="history-${item.id}" title="Ver Historial" style="color: #10b981; background: none; border: none; cursor: pointer; font-size: 22px;"><i class="ph ph-clock-counter-clockwise"></i></button>
-                    <button class="icon-btn delete-item-btn" id="delete-item-${item.id}" title="Borrar Item" style="color: ${item.revisado ? '#9ca3af' : '#ef4444'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-trash"></i></button>
+                    ${currentUserRole === 'admin' ? `<button class="icon-btn delete-item-btn" id="delete-item-${item.id}" title="Borrar Item" style="color: ${item.revisado ? '#9ca3af' : '#ef4444'}; background: none; border: none; cursor: ${item.revisado ? 'not-allowed' : 'pointer'}; font-size: 22px;" ${item.revisado ? 'disabled' : ''}><i class="ph ph-trash"></i></button>` : ''}
                 </td>
             `;
 
@@ -557,7 +573,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             checkbox.addEventListener('change', async (e) => {
                 const isChecked = e.target.checked;
 
-
+                if (isChecked) {
+                    if (!confirm('¿Estás seguro que quieres poner el check de revisado?')) {
+                        e.target.checked = false;
+                        return;
+                    }
+                } else {
+                    const pwd = prompt('Introduce la contraseña del comandante para desmarcar:');
+                    if (pwd !== '2026**') {
+                        alert('Contraseña incorrecta');
+                        e.target.checked = true;
+                        return;
+                    }
+                }
 
                 const updateData = { revisado: isChecked };
 
