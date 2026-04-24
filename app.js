@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const showRegister = document.getElementById('show-register');
     const showLogin = document.getElementById('show-login');
     const adminBtn = document.getElementById('admin-btn');
+    const logoutBtn = document.getElementById('logout-btn');
     const authFormsContainer = document.getElementById('auth-forms');
     const unitSelectionContainer = document.querySelector('.unit-selection');
     const splashInstruction = document.getElementById('splash-instruction');
@@ -85,6 +86,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Toggle forms
     showRegister.addEventListener('click', (e) => { e.preventDefault(); loginForm.style.display = 'none'; registerForm.style.display = 'flex'; splashInstruction.textContent = "Regístrate para continuar"; });
     showLogin.addEventListener('click', (e) => { e.preventDefault(); registerForm.style.display = 'none'; loginForm.style.display = 'flex'; splashInstruction.textContent = "Inicia sesión para continuar"; });
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
+                localStorage.removeItem('inventariador');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('selectedUnit');
+                window.location.reload();
+            }
+        });
+    }
 
     function loginSuccess(user, role) {
         inventariador = user;
@@ -115,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         btnLogin.innerHTML = 'Cargando...';
         btnLogin.disabled = true;
 
-        if (user === '17010' && pass === 'Adri135Emi135') {
+        if (user === 'comandante' && pass === '2026**') {
             loginSuccess(user, 'admin');
             btnLogin.innerHTML = 'Entrar';
             btnLogin.disabled = false;
@@ -150,7 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const user = document.getElementById('reg-user').value.trim();
         const pass = document.getElementById('reg-pass').value.trim();
         if (!user || !pass) return alert("Completa los datos");
-        if (user === '17010') return alert("Nombre de usuario no disponible");
+        if (user === 'comandante') return alert("Nombre de usuario no disponible");
 
         btnRegister.innerHTML = 'Cargando...';
         btnRegister.disabled = true;
@@ -217,7 +229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const user = document.getElementById('admin-reg-user').value.trim();
             const pass = document.getElementById('admin-reg-pass').value.trim();
             if (!user || !pass) return alert('Completa los campos');
-            if (user === '17010') return alert('No puedes usar ese nombre');
+            if (user === 'comandante') return alert('No puedes usar ese nombre');
 
             adminBtnRegister.innerHTML = 'Cargando...';
             try {
@@ -271,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         btn.textContent = 'Quitar Acceso';
                         btn.addEventListener('click', async () => {
                             const pwd = prompt('Introduce tu contraseña de comandante para desmarcar:');
-                            if (pwd === 'Adri135Emi135') {
+                            if (pwd === '2026**') {
                                 await updateDoc(doc(db, 'users', username), { approved: false });
                                 alert('Acceso removido.');
                                 loadAdminUsers();
