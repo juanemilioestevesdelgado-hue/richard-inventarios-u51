@@ -436,6 +436,63 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    const historyModal = document.getElementById('history-modal');
+    const closeHistoryModal = document.querySelector('.close-history-modal');
+    const historyModalContent = document.getElementById('history-modal-content');
+
+    if (historyModal) {
+        closeHistoryModal.addEventListener('click', () => historyModal.classList.add('hidden'));
+        historyModal.addEventListener('click', (e) => { if (e.target === historyModal) historyModal.classList.add('hidden'); });
+    }
+
+    function openHistoryModal(item) {
+        if (!historyModal || !historyModalContent) return;
+        
+        let historyHtml = '<p style="color: gray; font-size: 0.9rem;">No hay historial de cambios.</p>';
+        if (item.historial && item.historial.length > 0) {
+            const logs = [...item.historial].reverse().map(log => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee;">
+                    <div>
+                        <span style="display:block; font-size:0.85rem; color:#64748b;">[${log.date}]</span>
+                        <span><strong style="color:#6366f1;">${log.user}</strong>: ${log.change}</span>
+                    </div>
+                    ${currentUserRole === 'admin' ? `<button class="delete-history-btn" data-item="${item.id}" data-logid="${log.id}" style="background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; padding: 6px 10px; color: #ef4444; cursor: pointer; transition: all 0.2s;"><i class="ph ph-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+            historyHtml = `<div style="display: flex; flex-direction: column; gap: 5px;">${logs}</div>`;
+        }
+        
+        historyModalContent.innerHTML = historyHtml;
+        
+        // Attach delete listeners
+        if (currentUserRole === 'admin') {
+            const delBtns = historyModalContent.querySelectorAll('.delete-history-btn');
+            delBtns.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if(!confirm('¿Borrar este registro del historial?')) return;
+                    const logId = btn.getAttribute('data-logid');
+                    const logToRemove = item.historial.find(h => h.id === logId);
+                    if(logToRemove) {
+                        try {
+                            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i>';
+                            btn.disabled = true;
+                            await updateDoc(doc(db, currentCollection, item.id), {
+                                historial: arrayRemove(logToRemove)
+                            });
+                            btn.parentElement.remove();
+                        } catch(e) { 
+                            console.error(e); 
+                            btn.innerHTML = '<i class="ph ph-trash"></i>';
+                            btn.disabled = false;
+                        }
+                    }
+                });
+            });
+        }
+        
+        historyModal.classList.remove('hidden');
+    }
+
     function renderTable(inventoryData, tableBody, totalItemsEl, reviewedItemsEl, modal, modalImg) {
         tableBody.innerHTML = '';
 
@@ -511,60 +568,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             `;
             tableBody.appendChild(photoTr);
 
-            const historyTr = document.createElement('tr');
-            historyTr.id = `history-row-${item.id}`;
-            historyTr.className = 'photo-row hidden';
-            
-            let historyHtml = '<p style="color: gray; font-size: 0.9rem;">No hay historial de cambios.</p>';
-            if (item.historial && item.historial.length > 0) {
-                const logs = [...item.historial].reverse().map(log => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px; border-bottom: 1px solid #eee;">
-                        <span><strong style="color:#6366f1;">${log.user}</strong> [${log.date}]: ${log.change}</span>
-                        ${currentUserRole === 'admin' ? `<button class="delete-history-btn" data-item="${item.id}" data-logid="${log.id}" style="background: none; border: none; color: #ef4444; cursor: pointer;"><i class="ph ph-trash"></i></button>` : ''}
-                    </div>
-                `).join('');
-                historyHtml = `<div style="max-height: 150px; overflow-y: auto;">${logs}</div>`;
-            }
-
-            historyTr.innerHTML = `
-                <td colspan="16" style="padding: 10px 20px; background: #f8fafc;">
-                    <h4 style="margin-bottom: 10px; color: #475569;"><i class="ph ph-clock-counter-clockwise"></i> Historial de Cambios</h4>
-                    ${historyHtml}
-                </td>
-            `;
-            tableBody.appendChild(historyTr);
-
             // Toggle photo row
             const toggleBtn = tr.querySelector(`#toggle-${item.id}`);
-            toggleBtn.addEventListener('click', () => {
-                photoTr.classList.toggle('hidden');
-                toggleBtn.classList.toggle('expanded');
-            });
-
-            // Toggle history row
-            const historyBtn = tr.querySelector(`#history-${item.id}`);
-            if (historyBtn) {
-                historyBtn.addEventListener('click', () => {
-                    historyTr.classList.toggle('hidden');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => {
+                    photoTr.classList.toggle('hidden');
+                    toggleBtn.classList.toggle('expanded');
                 });
             }
 
-            // Delete history log (admin only)
-            if (currentUserRole === 'admin') {
-                const delBtns = historyTr.querySelectorAll('.delete-history-btn');
-                delBtns.forEach(btn => {
-                    btn.addEventListener('click', async () => {
-                        if(!confirm('¿Borrar este registro del historial?')) return;
-                        const logId = btn.getAttribute('data-logid');
-                        const logToRemove = item.historial.find(h => h.id === logId);
-                        if(logToRemove) {
-                            try {
-                                await updateDoc(doc(db, currentCollection, item.id), {
-                                    historial: arrayRemove(logToRemove)
-                                });
-                            } catch(e) { console.error(e); }
-                        }
-                    });
+            // Toggle history modal
+            const historyBtn = tr.querySelector(`#history-${item.id}`);
+            if (historyBtn) {
+                historyBtn.addEventListener('click', () => {
+                    openHistoryModal(item);
                 });
             }
 
